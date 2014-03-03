@@ -40,6 +40,9 @@
 #include "DataFormats/SiPixelDigi/interface/PixelDigi.h"
 #include "DataFormats/SiPixelDigi/interface/PixelDigiCollection.h"
 #include "SimDataFormats/TrackingHit/interface/PSimHitContainer.h"
+#include "SimDataFormats/PileupSummaryInfo/interface/PileupSummaryInfo.h"
+#include "SimGeneral/PileupInformation/interface/PileupInformation.h"
+#include "SimDataFormats/PileupSummaryInfo/interface/PileupMixingContent.h"
 #include "DataFormats/GeometryVector/interface/LocalPoint.h"
 #include "DataFormats/GeometryVector/interface/LocalVector.h"
 #include "Geometry/CommonDetUnit/interface/GeomDetUnit.h"
@@ -96,12 +99,12 @@ namespace cms
     edm::LogInfo ("PixelDigitizer ") <<"Enter the Pixel Digitizer";
     
     const std::string alias ("simSiPixelDigis"); 
-    
+  
     mixMod.produces<edm::DetSetVector<PixelDigi> >().setBranchAlias(alias);
     mixMod.produces<edm::DetSetVector<PixelDigiSimLink> >().setBranchAlias(alias + "siPixelDigiSimLink");
     for(auto const& trackerContainer : trackerContainers) {
       edm::InputTag tag(hitsProducer, trackerContainer);
-      iC.consumes<std::vector<PSimHit> >(edm::InputTag(hitsProducer, trackerContainer));
+      ttag_ = iC.consumes<std::vector<PSimHit> >(edm::InputTag(hitsProducer, trackerContainer));
     }
     edm::Service<edm::RandomNumberGenerator> rng;
     if ( ! rng.isAvailable()) {
@@ -113,7 +116,6 @@ namespace cms
   
     rndEngine       = &(rng->getEngine());
     _pixeldigialgo.reset(new SiPixelDigitizerAlgorithm(iConfig,(*rndEngine)));
-
   }
   
   SiPixelDigitizer::~SiPixelDigitizer(){  
@@ -154,7 +156,7 @@ namespace cms
       _pixeldigialgo->init(iSetup);
       first = false;
     }
-    _pixeldigialgo->initializeEvent();
+    _pixeldigialgo->initializeEvent(e);
     iSetup.get<TrackerDigiGeometryRecord>().get(geometryType, pDD);
     iSetup.get<IdealMagneticFieldRecord>().get(pSetup);
 
@@ -177,11 +179,11 @@ namespace cms
   void
   SiPixelDigitizer::accumulate(edm::Event const& iEvent, edm::EventSetup const& iSetup) {
     // Step A: Get Inputs
+
     for(vstring::const_iterator i = trackerContainers.begin(), iEnd = trackerContainers.end(); i != iEnd; ++i) {
       edm::Handle<std::vector<PSimHit> > simHits;
-      edm::InputTag tag(hitsProducer, *i);
-
-      iEvent.getByLabel(tag, simHits);
+     
+      iEvent.getByToken(ttag_, simHits);
       accumulatePixelHits(simHits);
     }
   }
@@ -220,7 +222,6 @@ namespace cms
         edm::DetSet<PixelDigi> collector((*iu)->geographicalId().rawId());
         edm::DetSet<PixelDigiSimLink> linkcollector((*iu)->geographicalId().rawId());
         
-        
         _pixeldigialgo->digitize(dynamic_cast<PixelGeomDetUnit*>((*iu)),
                                  collector.data,
                                  linkcollector.data,
@@ -233,13 +234,12 @@ namespace cms
         }
       }
     }
-    
+  
     // Step C: create collection with the cache vector of DetSet 
     std::auto_ptr<edm::DetSetVector<PixelDigi> > 
       output(new edm::DetSetVector<PixelDigi>(theDigiVector) );
     std::auto_ptr<edm::DetSetVector<PixelDigiSimLink> > 
       outputlink(new edm::DetSetVector<PixelDigiSimLink>(theDigiLinkVector) );
-
     // Step D: write output to file 
     iEvent.put(output);
     iEvent.put(outputlink);

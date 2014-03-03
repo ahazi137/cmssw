@@ -47,6 +47,7 @@
 #include "SimDataFormats/TrackerDigiSimLink/interface/PixelDigiSimLink.h"
 #include "SimDataFormats/TrackingHit/interface/PSimHitContainer.h"
 #include "SimTracker/Common/interface/SiG4UniversalFluctuation.h"
+#include "SimDataFormats/PileupSummaryInfo/interface/PileupSummaryInfo.h"
 #include "SiPixelDigitizerAlgorithm.h"
 
 #include <gsl/gsl_sf_erf.h>
@@ -362,8 +363,42 @@ SiPixelDigitizerAlgorithm::~SiPixelDigitizerAlgorithm() {
   LogDebug ("PixelDigitizer")<<"SiPixelDigitizerAlgorithm deleted";
 }
 
-SiPixelDigitizerAlgorithm::PixelEfficiencies::PixelEfficiencies(const edm::ParameterSet& conf, bool AddPixelInefficiency, int NumberOfBarrelLayers, int NumberOfEndcapDisks) {
-  // pixel inefficiency
+void SiPixelDigitizerAlgorithm::initializeEvent(edm::Event const& iEvent) {
+  _signal.clear();
+
+  //VV:
+  //edm::Handle<std::vector<PileupSummaryInfo> > puInfo;//doesn't work this way
+  //iEvent.getByLabel("addPileupInfo", puInfo);
+ 
+
+ //  if (puInfo.isValid() &&  
+//       (pixelEfficiencies_.theModuleEfficiency_BPix[0].size()>0 || 
+//        pixelEfficiencies_.theModuleEfficiency_BPix[1].size()>0 ||
+//        pixelEfficiencies_.theModuleEfficiency_BPix[2].size()>0)) {
+//     std::vector<PileupSummaryInfo>::const_iterator pu;
+//     std::vector<PileupSummaryInfo>::const_iterator pu0=puInfo->end();
+   
+//     for (pu=puInfo->begin(); pu!=puInfo->end(); ++pu) {
+//       if (pu->getBunchCrossing()==0) pu0=pu;
+//     }
+    
+//     if (pu0!=puInfo->end()) {
+//       double instlumi=pu0->getTrueNumInteractions()*221.95;
+//       double instlumi_pow=1.;
+//       for (size_t i=0; i<3; i++) {
+// 	if (pixelEfficiencies_.thePUEfficiency_BPix[i].empty()) continue;
+// 	for  (size_t j=0; j<pixelEfficiencies_.thePUEfficiency_BPix[i].size(); j++){
+// 	  _pu_scale[i]+=instlumi_pow*pixelEfficiencies_.thePUEfficiency_BPix[i][j];
+// 	  instlumi_pow*=instlumi;
+// 	}
+//       }
+//     }
+//   }
+  
+}
+
+  SiPixelDigitizerAlgorithm::PixelEfficiencies::PixelEfficiencies(const edm::ParameterSet& conf, bool AddPixelInefficiency, int NumberOfBarrelLayers, int NumberOfEndcapDisks) {
+    // pixel inefficiency
   // Don't use Hard coded values, read inefficiencies in from python or don't use any
   int NumberOfTotLayers = NumberOfBarrelLayers + NumberOfEndcapDisks;
   FPixIndex=NumberOfBarrelLayers;
@@ -382,9 +417,20 @@ SiPixelDigitizerAlgorithm::PixelEfficiencies::PixelEfficiencies(const edm::Param
 		     //
                      i=0;
 		     thePixelChipEfficiency[i++] = conf.getParameter<double>("thePixelChipEfficiency_BPix1");
-                     thePixelChipEfficiency[i++] = conf.getParameter<double>("thePixelChipEfficiency_BPix2");
+		     thePixelChipEfficiency[i++] = conf.getParameter<double>("thePixelChipEfficiency_BPix2");
                      thePixelChipEfficiency[i++] = conf.getParameter<double>("thePixelChipEfficiency_BPix3");
-                     if (NumberOfBarrelLayers>=4){thePixelChipEfficiency[i++] = conf.getParameter<double>("thePixelChipEfficiency_BPix4");}
+		     if (NumberOfBarrelLayers>=4){thePixelChipEfficiency[i++] = conf.getParameter<double>("thePixelChipEfficiency_BPix4");}
+		     //VV
+		     if (conf.exists("theLadderEfficiency_BPix1")) theLadderEfficiency_BPix[0] = conf.getParameter<std::vector<double> >("theLadderEfficiency_BPix1");
+		     if (conf.exists("theLadderEfficiency_BPix2")) theLadderEfficiency_BPix[1] = conf.getParameter<std::vector<double> >("theLadderEfficiency_BPix2");
+		     if (conf.exists("theLadderEfficiency_BPix3")) theLadderEfficiency_BPix[2] = conf.getParameter<std::vector<double> >("theLadderEfficiency_BPix3");
+		     if (conf.exists("theModuleEfficiency_BPix1")) theModuleEfficiency_BPix[0] = conf.getParameter<std::vector<double> >("theModuleEfficiency_BPix1");
+		     if (conf.exists("theModuleEfficiency_BPix2")) theModuleEfficiency_BPix[1] = conf.getParameter<std::vector<double> >("theModuleEfficiency_BPix2");
+		     if (conf.exists("theModuleEfficiency_BPix3")) theModuleEfficiency_BPix[2] = conf.getParameter<std::vector<double> >("theModuleEfficiency_BPix3");
+		     if (conf.exists("thePUEfficiency_BPix1")) thePUEfficiency_BPix[0] = conf.getParameter<std::vector<double> >("thePUEfficiency_BPix1");
+		     if (conf.exists("thePUEfficiency_BPix2")) thePUEfficiency_BPix[1] = conf.getParameter<std::vector<double> >("thePUEfficiency_BPix2");
+		     if (conf.exists("thePUEfficiency_BPix3")) thePUEfficiency_BPix[2] = conf.getParameter<std::vector<double> >("thePUEfficiency_BPix3");
+		     //VV end
 		     // The next is needed for Phase2 Tracker studies
 		     if (NumberOfBarrelLayers>=5){
 			if (NumberOfTotLayers>20){throw cms::Exception("Configuration") <<"SiPixelDigitizer was given more layers than it can handle";}
@@ -453,12 +499,11 @@ void SiPixelDigitizerAlgorithm::accumulateSimHits(std::vector<PSimHit>::const_it
 	<< (*ssbegin).detUnitId()
 	<< (*ssbegin).entryPoint() << " " << (*ssbegin).exitPoint() ;
 #endif
-
-      
+    
       std::vector<EnergyDepositUnit> ionization_points;
       std::vector<SignalPoint> collection_points;
 
-      // fill collection_points for this SimHit, indpendent of topology
+      // fill collection_points for this SimHit, independent of topology
       // Check the TOF cut
       if (  ((*ssbegin).tof() - pixdet->surface().toGlobal((*ssbegin).localPosition()).mag()/30.)>= theTofLowerCut &&
 	    ((*ssbegin).tof()- pixdet->surface().toGlobal((*ssbegin).localPosition()).mag()/30.) <= theTofUpperCut ) {
@@ -1109,7 +1154,6 @@ void SiPixelDigitizerAlgorithm::make_digis(float thePixelThresholdInE,
 	<< (*i).first << " " << (*i).second << " " << signalInElectrons
 	<< " " << adc << ip.first << " " << ip.second ;
 #endif
-
       // Load digis
       digis.emplace_back(ip.first, ip.second, adc);
 
@@ -1287,6 +1331,52 @@ void SiPixelDigitizerAlgorithm::pixel_inefficiency(const PixelEfficiencies& eff,
        if(numColumns>416)  LogWarning ("Pixel Geometry") <<" wrong columns in barrel "<<numColumns;
        if(numRows>160)  LogWarning ("Pixel Geometry") <<" wrong rows in barrel "<<numRows;
     }
+    // VV:
+    if ((layerIndex==1) && (eff.theLadderEfficiency_BPix[0].size()==20)) {
+      int ladder=tTopo->pxbLadder(detID);
+      std::cout<<"BPix1 Ladder "<<ladder<<": "<<eff.theLadderEfficiency_BPix[0][ladder-1]<<std::endl;
+      columnEfficiency*=eff.theLadderEfficiency_BPix[0][ladder-1];
+    }
+    if ((layerIndex==2) && (eff.theLadderEfficiency_BPix[1].size()==32)) {
+      int ladder=tTopo->pxbLadder(detID);
+      std::cout<<"BPix2 Ladder "<<ladder<<": "<<eff.theLadderEfficiency_BPix[1][ladder-1]<<std::endl;
+      columnEfficiency*=eff.theLadderEfficiency_BPix[1][ladder-1];
+    }
+    if ((layerIndex==3) && (eff.theLadderEfficiency_BPix[2].size()==44)) {
+      int ladder=tTopo->pxbLadder(detID);
+      std::cout<<"BPix3 Ladder "<<ladder<<": "<<eff.theLadderEfficiency_BPix[2][ladder-1]<<std::endl;
+      columnEfficiency*=eff.theLadderEfficiency_BPix[2][ladder-1];
+    }
+    if ((layerIndex==1) && (eff.theModuleEfficiency_BPix[0].size()==4)) {
+      int module=tTopo->pxbModule(detID);
+      if (module<=4) module=5-module;
+      else module-=4;
+      std::cout<<"BPix1 Module "<<module<<": "<<eff.theModuleEfficiency_BPix[0][module-1]<<std::endl;
+      columnEfficiency*=eff.theModuleEfficiency_BPix[0][module-1];
+    }
+    if ((layerIndex==2) && (eff.theModuleEfficiency_BPix[1].size()==4)) {
+      int module=tTopo->pxbModule(detID);
+      if (module<=4) module=5-module;
+      else module-=4;
+      std::cout<<"BPix2 Module "<<module<<": "<<eff.theModuleEfficiency_BPix[1][module-1]<<std::endl;
+      columnEfficiency*=eff.theModuleEfficiency_BPix[1][module-1];
+    }
+    if ((layerIndex==3) && (eff.theModuleEfficiency_BPix[2].size()==4)) {
+      int module=tTopo->pxbModule(detID);
+      if (module<=4) module=5-module;
+      else module-=4;
+      std::cout<<"BPix3 Module "<<module<<": "<<eff.theModuleEfficiency_BPix[2][module-1]<<std::endl;
+      columnEfficiency*=eff.theModuleEfficiency_BPix[2][module-1];
+    }
+    if ((layerIndex==1) && (_pu_scale[0]>0.)) {
+      columnEfficiency*=_pu_scale[0];
+    }
+    if ((layerIndex==2) && (_pu_scale[1]>0.)) {
+      columnEfficiency*=_pu_scale[1];
+    }
+    if ((layerIndex==3) && (_pu_scale[2]>0.)) {
+      columnEfficiency*=_pu_scale[2];
+    }
   } else {                // forward disks
     unsigned int diskIndex=tTopo->pxfDisk(detID)+eff.FPixIndex; // Use diskIndex-1 later to stay consistent with BPix
     //if (eff.FPixIndex>diskIndex-1){throw cms::Exception("Configuration") <<"SiPixelDigitizer is using the wrong efficiency value. index = "
@@ -1377,7 +1467,7 @@ void SiPixelDigitizerAlgorithm::pixel_inefficiency(const PixelEfficiencies& eff,
     } // end if
 
   } // end pixel loop
-} // end pixel_indefficiency
+} // end pixel_inefficiency
 
 //***********************************************************************
 
@@ -1569,18 +1659,86 @@ void SiPixelDigitizerAlgorithm::pixel_inefficiency_db(uint32_t detID) {
 
 //****************************************************************************************************
 
-void SiPixelDigitizerAlgorithm::module_killing_conf(uint32_t detID) {
+// void SiPixelDigitizerAlgorithm::module_killing_conf(uint32_t detID) {
+//   if(!use_module_killing_)
+//     return;
+  
+//   bool isbad=false;
+  
+//   Parameters::const_iterator itDeadModules=DeadModules.begin();
+  
+//   int detid = detID;
+//   for(; itDeadModules != DeadModules.end(); ++itDeadModules){
+//     int Dead_detID = itDeadModules->getParameter<int>("Dead_detID");
+//     if(detid == Dead_detID){
+//       isbad=true;
+//       break;
+//     }
+//   }
+  
+//   if(!isbad)
+//     return;
+
+//   signal_map_type& theSignal = _signal[detID];
+  
+//   std::string Module = itDeadModules->getParameter<std::string>("Module");
+  
+//   if(Module=="whole"){
+//     for(signal_map_iterator i = theSignal.begin();i != theSignal.end(); ++i) {
+//       i->second.set(0.); // reset amplitude
+//     }
+//   }
+  
+//   for(signal_map_iterator i = theSignal.begin();i != theSignal.end(); ++i) {
+//     std::pair<int,int> ip = PixelDigi::channelToPixel(i->first);//get pixel pos
+
+//     if(Module=="tbmA" && ip.first>=80 && ip.first<=159){
+//       i->second.set(0.);
+//     }
+
+//     if( Module=="tbmB" && ip.first<=79){
+//       i->second.set(0.);
+//     }
+//   }
+// }
+//****************************************************************************************************
+
+
+//****************************************************************************************************
+//modified (Jamila,Andras)
+
+void SiPixelDigitizerAlgorithm::module_killing_conf(uint32_t detid){
   if(!use_module_killing_)
     return;
-  
   bool isbad=false;
+
+  ////////split fpix and bpix
+  DetId detId = DetId(detid);       // Get the Detid object
+  //unsigned int detType=detId.det(); // det type, pixel=1
+  unsigned int subid=detId.subdetId(); //subdetector type, barrel=1, forward=2
+  //////fpix
+  PXFDetId pdetIdf = PXFDetId(detid);
+  unsigned int disk=pdetIdf.disk(); //1,2,3
+  unsigned int blade=pdetIdf.blade(); //1-24
+  int zindexF=pdetIdf.module(); //
+  unsigned int side=pdetIdf.side(); //size=1 for -z, 2 for +z
+  unsigned int panel=pdetIdf.panel(); //panel=1
+  //////bpix
+  PXBDetId pdetId = PXBDetId(detid);  //
+  //unsigned int detTypeP=pdetId.det();  // pix det identification
+  //unsigned int subidP=pdetId.subdetId(); // sub det id
+  // Barell layer = 1,2,3
+  int layerC=pdetId.layer();
+  // Barrel ladder id 1-20,32,44.
+  int ladderC=pdetId.ladder();
+  // Barrel Z-index=1,8
+  int zindex=pdetId.module();
   
   Parameters::const_iterator itDeadModules=DeadModules.begin();
   
-  int detid = detID;
   for(; itDeadModules != DeadModules.end(); ++itDeadModules){
-    int Dead_detID = itDeadModules->getParameter<int>("Dead_detID");
-    if(detid == Dead_detID){
+    unsigned int Dead_detID = itDeadModules->getParameter<int>("Dead_detID");
+    if(detid==Dead_detID){
       isbad=true;
       break;
     }
@@ -1588,30 +1746,370 @@ void SiPixelDigitizerAlgorithm::module_killing_conf(uint32_t detID) {
   
   if(!isbad)
     return;
-
-  signal_map_type& theSignal = _signal[detID];
-  
+  std::vector<GlobalPixel> badrocpositions (0);
+  signal_map_type& theSignal = _signal[detid];
+      
   std::string Module = itDeadModules->getParameter<std::string>("Module");
+  std::vector<int> Dead_RocID = itDeadModules->getParameter<std::vector<int>>("Dead_RocID"); //++
+  std::vector<int>::iterator itDeadRocs; //++
+  int Dead_RocID2, quartLdr;
+  if (layerC==1){quartLdr=5;}
+  if (layerC==2){quartLdr=8;}
+  if (layerC==3){quartLdr=11;}
   
   if(Module=="whole"){
-    for(signal_map_iterator i = theSignal.begin();i != theSignal.end(); ++i) {
+    for(signal_map_iterator i = theSignal.begin();i != theSignal.end(); i++) {
       i->second.set(0.); // reset amplitude
     }
   }
   
-  for(signal_map_iterator i = theSignal.begin();i != theSignal.end(); ++i) {
-    std::pair<int,int> ip = PixelDigi::channelToPixel(i->first);//get pixel pos
+  for(signal_map_iterator i = theSignal.begin();i != theSignal.end(); i++) {
+    std:: pair<int,int> ip = PixelDigi::channelToPixel(i->first);//get pixel pos
+    int drId;
+    
+    
+    if (subid==1){ //Barrel Mask  
+      if(zindex <= 4){ 
+	if (ladderC==quartLdr || ladderC==quartLdr+1 || ladderC==3*quartLdr || ladderC==3*quartLdr+1){// half modules
+	  if (Module=="none" && ip.first <   80){
+	    for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+	      if (*itDeadRocs==-1)  {i->second.set(0.);}
+	      else {
+		for(drId =0; drId < 8; drId++){
+		  if(*itDeadRocs==drId && ip.second <= (416-52*drId) && ip.second > (416-52*(drId+1))){
+		    i->second.set(0.);
+		  }
+		}
+	      }
+	    }
+	  }
+	}//end half modules Z<0 
+	else {// full modules 
+	  if((Module=="tbmA"||Module=="none") && ip.first <   80) {
+	    for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+	      if (*itDeadRocs==-1)  {i->second.set(0.);}
+	      else {
+		for(drId =0; drId < 8; drId++){
+		  if(*itDeadRocs==drId && ip.second <= (416-52*drId) && ip.second > (416-52*(drId+1))){
+		    i->second.set(0.);
+		  }
+		}
+	      }
+	    }
+	  }//end < 80 
+	  else if((Module=="tbmB" || Module=="none") && ip.first >= 80){ 
+	    for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+	      if (*itDeadRocs==-1)  {i->second.set(0.);}
+	      else if (*itDeadRocs>7){Dead_RocID2=*itDeadRocs%8;
+		for(drId =0; drId < 8; drId++){
+		  if(Dead_RocID2==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+		    i->second.set(0.);
+		  }
+		}
+	      }
+	    }
+	  }//end rows>=80 Z<0
+	}//end full module Z<0
+      }// end -Z
+      
+      if(zindex > 4){ 
+	if (ladderC==quartLdr || ladderC==quartLdr+1 || ladderC==3*quartLdr || ladderC==3*quartLdr+1){// half modules
+	  if (Module=="none" && ip.first <   80){
+	    for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {  
+	      if (*itDeadRocs==-1)  {i->second.set(0.);}
+	      else {
+		for(drId =0; drId < 8; drId++){
+		  if(*itDeadRocs==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+		    i->second.set(0.);
+		  }
+		}
+	      }
+	    }  
+	  }
+	}//end half modules Z>0
+	else {// full modules
+	  if((Module=="tbmB" || Module=="none") && ip.first < 80){
+	    for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+	      if (*itDeadRocs==-1)  {i->second.set(0.);}
+	      else if (*itDeadRocs>7){ Dead_RocID2=*itDeadRocs%8;
+		for(drId =0; drId < 8; drId++){
+		  if(Dead_RocID2==drId && ip.second <= (416-52*drId) && ip.second > (416-52*(drId+1))){
+		    i->second.set(0.);
+		  }
+		}
+	      }
+	    }
+	  }//end rows<80 Z>0
+	  else if((Module=="tbmA"||Module=="none") && ip.first >= 80){
+	    for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+	      if (*itDeadRocs==-1)  {i->second.set(0.);}
+	      else {
+		for(drId =0; drId < 8; drId++){
+		  if(*itDeadRocs==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+		    i->second.set(0.);
+		  }
+		}
+	      }
+	    } 
+	  }//end rows>=80  Z>0
+	}//end full modules Z>0
+      }//end +Z 
+    } //barrel mask ends
+    
+    //end mapiterator-barrel
+    
+    
+    else if (subid==2){   //Endcap Mask
+      if(side==1 && (disk==1 || disk==2)) {//-zD1 -zD2
+	if(panel==1){//Panel 1 with 4 plaquettes
+	  if (blade==1 || blade==6 || blade==13 || blade==18){//Left Panels
+	    for (int modRocs=2; modRocs <6; modRocs++){//modRocs=1X(2,3,4,5)
+              if(zindexF != modRocs-1) continue;
+	      if((Module=="none") && ip.first < 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else{Dead_RocID2=*itDeadRocs%modRocs;
+		    for(drId =0; drId < modRocs; drId++){
+		      if(Dead_RocID2==drId && ip.second <= 52*(modRocs-drId) && ip.second > 52*(modRocs-(drId+1))){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		} 
+	      }// <80
+              else if((Module=="none") && ip.first >= 80 && (modRocs==3 || modRocs==4)){//modRocs=2X(3,4)
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else{
+		    for(drId =0; drId < modRocs; drId++){
+		      if(*itDeadRocs==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		}
+	      } // >=80
+	    }//loop on mods
+	  }// PL4 ends
+          else{//Right panels
+ 	    for (int modRocs=2; modRocs <6; modRocs++){//modRocs=1X(2,3,4,5)
+              if(zindexF != modRocs-1) continue;
+	      if((Module=="none") && ip.first < 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else{Dead_RocID2=*itDeadRocs%modRocs;
+		    for(drId =0; drId < modRocs; drId++){
+		      if(Dead_RocID2==drId && ip.second <= 52*(modRocs-drId) && ip.second > 52*(modRocs-(drId+1))){
+			i->second.set(0.);
+		      }
+		    }
+		  } 
+		}
+	      }// <80
+              else if((Module=="none") && ip.first >= 80 && (modRocs==3 || modRocs==4)){//modRocs=2X(3,4)
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else{
+		    for(drId =0; drId < modRocs; drId++){
+		      if(*itDeadRocs==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		}
+	      } // >=80
+	    }//loop on mods
+          }// PR4 ends
+        }// panel 1 ends
+	if(panel==2){//Panel 2 with 3 plaquettes
+	  if (blade==1 || blade==7 || blade==12 || blade==13 || blade==19 || blade==24){//Left Panels
+	    for (int modRocs=3; modRocs <6; modRocs++){//modRocs=2X(3,4,5)
+              if(zindexF != modRocs-2) continue;
+	      if((Module=="none") && ip.first < 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else{Dead_RocID2=*itDeadRocs%modRocs;
+		    for(drId =0; drId < modRocs; drId++){
+		      if(Dead_RocID2==drId && ip.second <= 52*(modRocs-drId) && ip.second > 52*(modRocs-(drId+1))){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		}
+	      }// <80
+              else if((Module=="none") && ip.first >= 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else{
+		    for(drId =0; drId < modRocs; drId++){
+		      if(*itDeadRocs==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		}
+	      } // >=80
+	    }//loop on mods
+	  }// PL3 ends
+          else{//Right panels
+ 	    for (int modRocs=3; modRocs <6; modRocs++){//modRocs=2X(3,4,5)
+              if(zindexF != modRocs-2) continue;
+	      if((Module=="none") && ip.first < 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else{
+		    for(drId =0; drId < modRocs; drId++){
+		      if(*itDeadRocs==drId && ip.second <= 52*(modRocs-drId) && ip.second > 52*(modRocs-(drId+1))){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		} // <80
+	      }
+              else if((Module=="none") && ip.first >= 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else{Dead_RocID2=*itDeadRocs%modRocs;
+		    for(drId =0; drId < modRocs; drId++){
+		      if(Dead_RocID2==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		}
+	      } // >=80
+	    }//loop on mods
+          }// PR3 ends
+        }// panel 2 ends
+      }//Side (1,1) and (1,2) ends
+      else if(side==2 && (disk==1 || disk==2)) {//+zD1 +zD2
+	if(panel==1){//Panel 1 with 4 plaquettes
+	  if (blade==1 || blade==6 || blade==13 || blade==18){//Right Panels
+	    for (int modRocs=2; modRocs <6; modRocs++){//modRocs=1X(2,3,4,5)
+              if(zindexF != modRocs-1) continue;
+	      if((Module=="none") && ip.first < 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else{Dead_RocID2=*itDeadRocs%modRocs;
+		    for(drId =0; drId < modRocs; drId++){
+		      if(Dead_RocID2==drId && ip.second <= 52*(modRocs-drId) && ip.second > 52*(modRocs-(drId+1))){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		} 
+	      }// <80
+              else if((Module=="none") && ip.first >= 80 && (modRocs==3 || modRocs==4)){//modRocs=2X(3,4)
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else{
+		    for(drId =0; drId < modRocs; drId++){
+		      if(*itDeadRocs==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		}
+	      } // >=80
+	    }//loop on mods
+	  }// PR4 ends
+          else{//Left panels
+ 	    for (int modRocs=2; modRocs <6; modRocs++){//modRocs=1X(2,3,4,5)
+              if(zindexF != modRocs-1) continue;
+	      if((Module=="none") && ip.first < 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else{Dead_RocID2=*itDeadRocs%modRocs;
+		    for(drId =0; drId < modRocs; drId++){
+		      if(Dead_RocID2==drId && ip.second <= 52*(modRocs-drId) && ip.second > 52*(modRocs-(drId+1))){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		} // <80
+	      }
+              else if((Module=="none") && ip.first >= 80 && (modRocs==3 || modRocs==4)){//modRocs=2X(3,4)
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else{
+		    for(drId =0; drId < modRocs; drId++){
+		      if(*itDeadRocs==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		}
+	      } // >=80
+	    }//loop on mods
+          }// PL4 ends
+        }// panel 1 ends
+	if(panel==2){//Panel 2 with 3 plaquettes
+	  if (blade==1 || blade==7 || blade==12 || blade==13 || blade==19 || blade==24){//Right Panels
+	    for (int modRocs=3; modRocs <6; modRocs++){//modRocs=2X(3,4,5)
+              if(zindexF != modRocs-2) continue;
+	      if((Module=="none") && ip.first < 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else{Dead_RocID2=*itDeadRocs%modRocs;
+		    for(drId =0; drId < modRocs; drId++){
+		      if(Dead_RocID2==drId && ip.second <= 52*(modRocs-drId) && ip.second > 52*(modRocs-(drId+1))){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		}
+	      }// <80
+              else if((Module=="none") && ip.first >= 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else{
+		    for(drId =0; drId < modRocs; drId++){
+		      if(*itDeadRocs==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		}
+	      } // >=80
+	    }//loop on mods
+	  }// PR3 ends
+          else{//Left panels
+ 	    for (int modRocs=3; modRocs <6; modRocs++){//modRocs=2X(3,4,5)
+              if(zindexF != modRocs-2) continue;
+	      if((Module=="none") && ip.first < 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else{
+		    for(drId =0; drId < modRocs; drId++){
+		      if(*itDeadRocs==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		} // <80
+	      }
+              else if((Module=="none") && ip.first >= 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else{Dead_RocID2=*itDeadRocs%modRocs;
+		    for(drId =0; drId < modRocs; drId++){
+		      if(Dead_RocID2==drId && ip.second <= 52*(modRocs-drId) && ip.second > 52*(modRocs-(drId+1))){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		}
+	      } // >=80
+	    }//loop on mods
+          }// PL3 ends
+        }// panel 2 ends
+      } 
+    }//endcap mask ends
+  }//end signal_map_iterator
 
-    if(Module=="tbmA" && ip.first>=80 && ip.first<=159){
-      i->second.set(0.);
-    }
-
-    if( Module=="tbmB" && ip.first<=79){
-      i->second.set(0.);
-    }
-  }
 }
 //****************************************************************************************************
+
 void SiPixelDigitizerAlgorithm::module_killing_DB(uint32_t detID) {
 // Not SLHC safe for now
   if(!use_module_killing_)
@@ -1636,8 +2134,8 @@ void SiPixelDigitizerAlgorithm::module_killing_DB(uint32_t detID) {
     return;
 
   signal_map_type& theSignal = _signal[detID];
-  
-  //std::cout<<"Hit in: "<< detID <<" errorType "<< badmodule.errorType<<" BadRocs="<<std::hex<<SiPixelBadModule_->getBadRocs(detID)<<dec<<" "<<std::endl;
+ 
+ // std::cout<<"Hit in: "<< detID <<" errorType "<< badmodule.errorType<<" BadRocs="<<std::hex<<SiPixelBadModule_->getBadRocs(detID)<<" "<<std::endl;
   if(badmodule.errorType == 0){ // this is a whole dead module.
     
     for(signal_map_iterator i = theSignal.begin();i != theSignal.end(); ++i) {

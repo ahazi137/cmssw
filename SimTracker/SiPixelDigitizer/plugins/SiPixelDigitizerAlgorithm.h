@@ -10,6 +10,7 @@
 #include "FWCore/Framework/interface/ESHandle.h"
 #include "SimDataFormats/EncodedEventId/interface/EncodedEventId.h"
 #include "SimDataFormats/TrackingHit/interface/PSimHit.h"
+#include "SimDataFormats/PileupSummaryInfo/interface/PileupSummaryInfo.h"
 #include "SimTracker/Common/interface/SimHitInfoForLinks.h"
 #include "DataFormats/Math/interface/approx_exp.h"
 
@@ -26,6 +27,7 @@ namespace CLHEP {
 namespace edm {
   class EventSetup;
   class ParameterSet;
+  class Event;
 }
 
 class DetId;
@@ -49,10 +51,8 @@ class SiPixelDigitizerAlgorithm  {
   // initialization that cannot be done in the constructor
   void init(const edm::EventSetup& es);
   
-  void initializeEvent() {
-    _signal.clear();
-  }
-
+  void initializeEvent(edm::Event const& iEvent);
+     
   //run the algorithm to digitize a single det
   void accumulateSimHits(const std::vector<PSimHit>::const_iterator inputBegin,
                          const std::vector<PSimHit>::const_iterator inputEnd,
@@ -232,19 +232,24 @@ class SiPixelDigitizerAlgorithm  {
      float thePixelEfficiency[20];     // Single pixel effciency
      float thePixelColEfficiency[20];  // Column effciency
      float thePixelChipEfficiency[20]; // ROC efficiency
+     std::vector<double> theLadderEfficiency_BPix[20];//VV
+     std::vector<double> theModuleEfficiency_BPix[20];
+     std::vector<double> thePUEfficiency_BPix[20];//VV end
      unsigned int FPixIndex;         // The Efficiency index for FPix Disks
    };
 
  private:
-
-    // Internal typedefs
-    typedef std::map<int, Amplitude, std::less<int> > signal_map_type;  // from Digi.Skel.
-    typedef signal_map_type::iterator          signal_map_iterator; // from Digi.Skel.  
-    typedef signal_map_type::const_iterator    signal_map_const_iterator; // from Digi.Skel.  
-    typedef std::map<unsigned int, std::vector<float>,std::less<unsigned int> > simlink_map;
-    typedef std::map<uint32_t, signal_map_type> signalMaps;
-    typedef GloballyPositioned<double>      Frame;
-    typedef std::vector<edm::ParameterSet> Parameters;
+   //VV
+   double _pu_scale[20];//0-3 BPix, 4-5 FPix
+   
+   // Internal typedefs
+   typedef std::map<int, Amplitude, std::less<int> > signal_map_type;  // from Digi.Skel.
+   typedef signal_map_type::iterator          signal_map_iterator; // from Digi.Skel.  
+   typedef signal_map_type::const_iterator    signal_map_const_iterator; // from Digi.Skel.  
+   typedef std::map<unsigned int, std::vector<float>,std::less<unsigned int> > simlink_map;
+   typedef std::map<uint32_t, signal_map_type> signalMaps;
+   typedef GloballyPositioned<double>      Frame;
+   typedef std::vector<edm::ParameterSet> Parameters;
 
     // Contains the accumulated hit info.
     signalMaps _signal;
@@ -267,13 +272,11 @@ class SiPixelDigitizerAlgorithm  {
     const float Sigma0; //=0.0007  // Charge diffusion in microns for 300 micron Si
     const float Dist300;  //=0.0300  // Define 300microns for normalization 
     const bool alpha2Order;          // Switch on/off of E.B effect 
-
-
- 
     //-- induce_signal
     const float ClusterWidth;       // Gaussian charge cutoff width in sigma units
     //-- Allow for upgrades
     const int NumberOfBarrelLayers;     // Default = 3
+
     const int NumberOfEndcapDisks;      // Default = 2
 
     //-- make_digis 

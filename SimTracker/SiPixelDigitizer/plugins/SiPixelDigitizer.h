@@ -20,6 +20,7 @@
 
 #include "SimGeneral/MixingModule/interface/DigiAccumulatorMixMod.h"
 #include "FWCore/Framework/interface/ESHandle.h"
+#include "FWCore/Utilities/interface/EDGetToken.h"
 
 namespace CLHEP {
   class HepRandomEngine;
@@ -69,6 +70,7 @@ namespace cms {
     edm::ESHandle<MagneticField> pSetup;
     std::map<unsigned int, PixelGeomDetUnit*> detectorUnits;
     CLHEP::HepRandomEngine* rndEngine;
+    edm::EDGetTokenT<std::vector<PSimHit> > ttag_;
 
     // infrastructure to reject dead pixels as defined in db (added by F.Blekman)
   };
