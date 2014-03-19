@@ -57,6 +57,15 @@ namespace cms {
     virtual void finalizeEvent(edm::Event& e, edm::EventSetup const& c) override;
 
     virtual void beginJob() {}
+    
+    virtual void StorePileupInformation( std::vector<int> &numInteractionList,
+					 std::vector<int> &bunchCrossingList,
+					 std::vector<float> &TrueInteractionList){
+      PileupInfo_ = new PileupMixingContent(numInteractionList, bunchCrossingList, TrueInteractionList);
+    }
+
+    virtual PileupMixingContent* getEventPileupInfo() { return PileupInfo_; }
+
   private:
     void accumulatePixelHits(edm::Handle<std::vector<PSimHit> >);   
     bool first;
@@ -69,6 +78,8 @@ namespace cms {
     edm::ESHandle<MagneticField> pSetup;
     std::map<unsigned int, PixelGeomDetUnit*> detectorUnits;
     CLHEP::HepRandomEngine* rndEngine;
+
+    PileupMixingContent* PileupInfo_;
 
     // infrastructure to reject dead pixels as defined in db (added by F.Blekman)
   };
