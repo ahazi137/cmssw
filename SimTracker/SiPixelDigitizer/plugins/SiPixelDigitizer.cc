@@ -172,6 +172,26 @@ namespace cms
         }
       }
     }
+//////
+    const PileupMixingContent* puInfo = getEventPileupInfo();
+    
+    if(puInfo) {  
+      std::cout << "puinfo is valid, getting bunchcossing" << std::endl;
+      const std::vector<int> bunchCrossing = puInfo->getMix_bunchCrossing();
+      const std::vector<int> numInteractionList =  puInfo->getMix_Ninteractions();
+      const std::vector<float> TrueInteractionList = puInfo->getMix_TrueInteractions();      
+
+      for(int i : bunchCrossing) {
+ 	std::cout << "bunchcrossing: " << i << std::endl;
+      }
+      for(int i :  numInteractionList) {
+ 	std::cout << "number of interactions: " << i << std::endl;
+      }
+      for(int i : TrueInteractionList) {
+ 	std::cout << "true number of interactions: " << i << std::endl;
+      }
+    }
+/////
   }
 
   void
@@ -180,7 +200,7 @@ namespace cms
     for(vstring::const_iterator i = trackerContainers.begin(), iEnd = trackerContainers.end(); i != iEnd; ++i) {
       edm::Handle<std::vector<PSimHit> > simHits;
       edm::InputTag tag(hitsProducer, *i);
-
+      
       iEvent.getByLabel(tag, simHits);
       accumulatePixelHits(simHits);
     }
@@ -192,7 +212,7 @@ namespace cms
     for(vstring::const_iterator i = trackerContainers.begin(), iEnd = trackerContainers.end(); i != iEnd; ++i) {
       edm::Handle<std::vector<PSimHit> > simHits;
       edm::InputTag tag(hitsProducer, *i);
-
+      
       iEvent.getByLabel(tag, simHits);
       accumulatePixelHits(simHits);
     }

@@ -432,8 +432,14 @@ namespace edm {
         TrueInteractionList.push_back((TrueNumInteractions_)[bunchCrossing-minBunch_]);
       }
     }
-
-
+      
+    for(Accumulators::const_iterator accItr = digiAccumulators_.begin(), accEnd = digiAccumulators_.end(); accItr != accEnd; ++accItr) {
+      
+      (*accItr)->StorePileupInformation( bunchCrossingList,
+					 numInteractionList,
+ 					 TrueInteractionList);  
+    }
+    
     PileupMixing_ = std::auto_ptr<PileupMixingContent>(new PileupMixingContent(bunchCrossingList,
                                                                                numInteractionList,
                                                                                TrueInteractionList));

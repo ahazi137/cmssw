@@ -60,7 +60,8 @@ namespace cms {
     
     virtual void StorePileupInformation( std::vector<int> &numInteractionList,
 					 std::vector<int> &bunchCrossingList,
-					 std::vector<float> &TrueInteractionList){
+					 std::vector<float> &TrueInteractionList) {
+      
       PileupInfo_ = new PileupMixingContent(numInteractionList, bunchCrossingList, TrueInteractionList);
     }
 
