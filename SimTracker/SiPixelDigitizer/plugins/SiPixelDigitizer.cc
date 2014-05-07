@@ -51,6 +51,7 @@
 #include "Geometry/TrackerGeometryBuilder/interface/PixelGeomDetType.h"
 
 #include "DataFormats/SiPixelDetId/interface/PixelSubdetector.h"
+#include "DataFormats/TrackerCommon/interface/TrackerTopology.h"
 // user include files
 #include "FWCore/Framework/interface/Frameworkfwd.h"
 #include "FWCore/Framework/interface/EDAnalyzer.h"
@@ -96,7 +97,9 @@ namespace cms
     _pixeldigialgo(),
     hitsProducer(iConfig.getParameter<std::string>("hitsProducer")),
     trackerContainers(iConfig.getParameter<std::vector<std::string> >("ROUList")),
-    geometryType(iConfig.getParameter<std::string>("GeometryType"))
+    geometryType(iConfig.getParameter<std::string>("GeometryType")),
+    pilotBlades(iConfig.exists("PilotGeom")?iConfig.getParameter<bool>("PilotGeom"):false),
+    NumberOfEndcapDisks(iConfig.exists("NumPixelEndcap")?iConfig.getParameter<int>("NumPixelEndcap"):2)
   {
     edm::LogInfo ("PixelDigitizer ") <<"Enter the Pixel Digitizer";
     
@@ -139,6 +142,7 @@ namespace cms
            // The insert succeeded, so this detector element has not yet been processed.
            unsigned int isub = DetId(detId).subdetId();
            if((isub == PixelSubdetector::PixelBarrel) || (isub == PixelSubdetector::PixelEndcap)) {
+	     if (detectorUnits.find(detId) == detectorUnits.end()) continue;
              PixelGeomDetUnit* pixdet = detectorUnits[detId];
              //access to magnetic field in global coordinates
              GlobalVector bfield = pSetup->inTesla(pixdet->surface().position());
@@ -160,6 +164,9 @@ namespace cms
     _pixeldigialgo->initializeEvent();
     iSetup.get<TrackerDigiGeometryRecord>().get(geometryType, pDD);
     iSetup.get<IdealMagneticFieldRecord>().get(pSetup);
+    edm::ESHandle<TrackerTopology> tTopoHand;
+    iSetup.get<IdealGeometryRecord>().get(tTopoHand);
+    const TrackerTopology *tTopo=tTopoHand.product();
 
     // FIX THIS! We only need to clear and (re)fill this map when the geometry type IOV changes.  Use ESWatcher to determine this.
     if(true) { // Replace with ESWatcher 
@@ -171,6 +178,9 @@ namespace cms
         if((isub == PixelSubdetector::PixelBarrel) || (isub == PixelSubdetector::PixelEndcap)) {  
           PixelGeomDetUnit* pixdet = dynamic_cast<PixelGeomDetUnit*>((*iu));
           assert(pixdet != 0);
+	  unsigned int disk = tTopo->pxfDisk(detId);
+	  //if using pilot blades, then allowing it for current detector only
+	  if ((disk == 3)&&((!pilotBlades)&&(NumberOfEndcapDisks == 2))) continue;
           detectorUnits.insert(std::make_pair(detId, pixdet));
         }
       }
