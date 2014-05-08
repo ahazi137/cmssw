@@ -98,7 +98,7 @@ namespace cms
     hitsProducer(iConfig.getParameter<std::string>("hitsProducer")),
     trackerContainers(iConfig.getParameter<std::vector<std::string> >("ROUList")),
     geometryType(iConfig.getParameter<std::string>("GeometryType")),
-    pilotBlades(iConfig.exists("PilotGeom")?iConfig.getParameter<bool>("PilotGeom"):false),
+    pilotBlades(iConfig.exists("enablePilotBlades")?iConfig.getParameter<bool>("enablePilotBlades"):false),
     NumberOfEndcapDisks(iConfig.exists("NumPixelEndcap")?iConfig.getParameter<int>("NumPixelEndcap"):2)
   {
     edm::LogInfo ("PixelDigitizer ") <<"Enter the Pixel Digitizer";
@@ -142,8 +142,9 @@ namespace cms
            // The insert succeeded, so this detector element has not yet been processed.
            unsigned int isub = DetId(detId).subdetId();
            if((isub == PixelSubdetector::PixelBarrel) || (isub == PixelSubdetector::PixelEndcap)) {
-	     if (detectorUnits.find(detId) == detectorUnits.end()) continue;
-             PixelGeomDetUnit* pixdet = detectorUnits[detId];
+	     std::map<unsigned int, PixelGeomDetUnit*>::iterator itDet = detectorUnits.find(detId);	     
+	     if (itDet == detectorUnits.end()) continue;
+             PixelGeomDetUnit* pixdet = itDet->second;
              //access to magnetic field in global coordinates
              GlobalVector bfield = pSetup->inTesla(pixdet->surface().position());
              LogDebug ("PixelDigitizer ") << "B-field(T) at " << pixdet->surface().position() << "(cm): " 
