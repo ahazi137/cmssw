@@ -84,7 +84,6 @@ namespace cms {
 
     PileupMixingContent* PileupInfo_;
     
-    //-- Allow for upgrades 
     const bool pilotBlades; // Default = false
     const int NumberOfEndcapDisks; // Default = 2
     
