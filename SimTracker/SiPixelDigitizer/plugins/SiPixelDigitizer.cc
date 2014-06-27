@@ -132,10 +132,13 @@ namespace cms
   //
 
   void
-  SiPixelDigitizer::accumulatePixelHits(edm::Handle<std::vector<PSimHit> > hSimHits, CLHEP::HepRandomEngine* engine) {
+  SiPixelDigitizer::accumulatePixelHits(edm::Handle<std::vector<PSimHit> > hSimHits, CLHEP::HepRandomEngine* engine, edm::EventSetup const& iSetup) {
     if(hSimHits.isValid()) {
        std::set<unsigned int> detIds;
        std::vector<PSimHit> const& simHits = *hSimHits.product();
+       edm::ESHandle<TrackerTopology> tTopoHand;
+       iSetup.get<IdealGeometryRecord>().get(tTopoHand);
+       const TrackerTopology *tTopo=tTopoHand.product();
        for(std::vector<PSimHit>::const_iterator it = simHits.begin(), itEnd = simHits.end(); it != itEnd; ++it) {
          unsigned int detId = (*it).detUnitId();
          if(detIds.insert(detId).second) {
@@ -149,7 +152,7 @@ namespace cms
              GlobalVector bfield = pSetup->inTesla(pixdet->surface().position());
              LogDebug ("PixelDigitizer ") << "B-field(T) at " << pixdet->surface().position() << "(cm): " 
                                           << pSetup->inTesla(pixdet->surface().position());
-             _pixeldigialgo->accumulateSimHits(it, itEnd, pixdet, bfield, engine);
+             _pixeldigialgo->accumulateSimHits(it, itEnd, pixdet, bfield, tTopo, engine);
            }
          }
        }
@@ -198,7 +201,7 @@ namespace cms
       edm::InputTag tag(hitsProducer, *i);
 
       iEvent.getByLabel(tag, simHits);
-      accumulatePixelHits(simHits, randomEngine(iEvent.streamID()));
+      accumulatePixelHits(simHits, randomEngine(iEvent.streamID()), iSetup);
     }
   }
 
@@ -210,7 +213,7 @@ namespace cms
       edm::InputTag tag(hitsProducer, *i);
 
       iEvent.getByLabel(tag, simHits);
-      accumulatePixelHits(simHits, randomEngine(streamID));
+      accumulatePixelHits(simHits, randomEngine(streamID), iSetup);
     }
   }
 

@@ -68,7 +68,7 @@ namespace cms {
     virtual PileupMixingContent* getEventPileupInfo() { return PileupInfo_; }
 
   private:
-    void accumulatePixelHits(edm::Handle<std::vector<PSimHit> >, CLHEP::HepRandomEngine*);
+    void accumulatePixelHits(edm::Handle<std::vector<PSimHit> >, CLHEP::HepRandomEngine*, edm::EventSetup const& c);
     CLHEP::HepRandomEngine* randomEngine(edm::StreamID const& streamID);
 
     bool first;
