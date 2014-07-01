@@ -65,6 +65,7 @@ New det-id.
 #include <TFile.h>
 #include <TF1.h>
 #include <TH2F.h>
+#include <TH3F.h>
 #include <TH1F.h>
 #include <TProfile.h>
 
@@ -109,8 +110,10 @@ private:
   TH1F *hglobr1,*hglobr2,*hglobr3,*hglobz1, *hglobz2, *hglobz3;
   TH1F *hcolsB,  *hrowsB,  *hcolsF,  *hrowsF;
 
-  TH2F *htest, *htest2, *htest3, *htest4, *htest5;
+  TH2F *htest, *htest2, *htest3, *htest4, *htest5, *htest6;
+  TH3F *htest7;
   //TProfile *hp1, *hp2, *hp3, *hp4, *hp5;
+ 
 
 #ifdef CHECK_GEOM
   float modulePositionZ[3][44][8];
@@ -254,7 +257,8 @@ void PixelSimHitsTest::beginJob() {
     htest2 = fs->make<TH2F>("htest2"," ",108,-27.,27.,60,0.,600.);  // global z versus eloss
     htest3 = fs->make<TH2F>("htest3"," ",240,-12.,12.,240,-12.,12.);  // x-y plane
     //htest4 = fs->make<TH2F>("htest4"," ",80,-4.,4.,100,-5.,5.);
-
+    htest6 = fs->make<TH2F>("htest4"," ",240,-65.,65.,240,-12.,12.);//z-y plane pilot
+    htest7 = fs->make<TH3F>("htest7"," ",240,-65.,-20.,240,-12.,12.,240,-12.,12.);//x-y-z plane pilot
     //hp1 = fs->make<TProfile>("hp1"," ",50,0.,50.);    // default option
     //hp2 = fs->make<TProfile>("hp2"," ",50,0.,50.," "); // option set to " "
     //hp3 = fs->make<TProfile>("hp3"," ",50,0.,50.,-100.,100.); //
@@ -487,6 +491,9 @@ void PixelSimHitsTest::analyze(const edm::Event& iEvent,
      if(DEBUG) cout<<", global pos "<<gloX<<" "<<gloY<<" "<<gloR<<" "<<gloZ<<endl;
 
      htest3->Fill(gloX,gloY);
+     htest7->Fill(gloZ,gloX,gloY);
+     htest6->Fill(gloZ,gloY,100);
+       
      hdetunit->Fill(float(detId.rawId()));
      hpabs->Fill(p);
      htof->Fill(tof);

@@ -6,7 +6,9 @@ process = cms.Process("Test")
 
 process.load("FWCore.MessageLogger.MessageLogger_cfi")
 # process.load("Configuration.StandardSequences.Geometry_cff")
-process.load("Configuration.Geometry.GeometryIdeal_cff")
+#process.load("Configuration.Geometry.GeometryIdeal_cff")
+#process.load('Configuration.Geometry.GeometryExtended2017Reco_cff')
+process.load('Configuration.Geometry.GeometryExtended2019Reco_cff')
 process.load("Configuration.StandardSequences.MagneticField_38T_cff")
 process.load("Configuration.StandardSequences.FrontierConditions_GlobalTag_cff")
 process.load("Configuration.StandardSequences.Services_cff")
@@ -136,29 +138,51 @@ process.RandomNumberGeneratorService = cms.Service("RandomNumberGeneratorService
 
 
 process.maxEvents = cms.untracked.PSet(
-    input = cms.untracked.int32(-1)
+    input = cms.untracked.int32(1000)
 )
 
 process.source = cms.Source("PoolSource", fileNames = cms.untracked.vstring(
-       'file:/afs/cern.ch/work/d/dkotlins/public//MC/mu/pt100/simhits/simHits1.root'
+       'file:/afs/cern.ch/work/a/ahazi/public/datas/CMSSW_6_2_0_SLHC13-RelValSingleMuPt1-GEN-SIM-DES19_62_V8_UPG2019-v1/D4BD2CC3-B2E5-E311-876F-002590593876.root'
+       #'file:/afs/cern.ch/work/a/ahazi/public/datas/gensim8k_cmssw710pre1/MinBias_8TeV_GEN_SIM_2000k_13_1_DUJ.root'
   )
 )
 
 # Choose the global tag here:
 # for v7.0
-process.GlobalTag.globaltag = 'MC_70_V1::All'
+#process.GlobalTag.globaltag = 'MC_70_V1::All'
+
+# Other statements
+from Configuration.AlCa.GlobalTag import GlobalTag
+process.GlobalTag = GlobalTag(process.GlobalTag, 'auto:upgradePLS1', '')
 
 process.o1 = cms.OutputModule("PoolOutputModule",
             outputCommands = cms.untracked.vstring('drop *','keep *_*_*_Test'),
-      fileName = cms.untracked.string('file:/afs/cern.ch/work/d/dkotlins/public/MC/mu/pt100/digis/digis1.root')
+      fileName = cms.untracked.string('file:digis_phaseI_2019.root')
 #      fileName = cms.untracked.string('file:dummy.root')
 )
 
 process.g4SimHits.Generator.HepMCProductLabel = 'source'
 
+# customisation of the process.
+
+# Automatic addition of the customisation function from SLHCUpgradeSimulations.Configuration.postLS1Customs
+from SLHCUpgradeSimulations.Configuration.postLS1Customs import customisePostLS1
+
+#call to customisation function customisePostLS1 imported from SLHCUpgradeSimulations.Configuration.postLS1Customs
+process = customisePostLS1(process)
+
+# Automatic addition of the customisation function from SLHCUpgradeSimulations.Configuration.phase1TkCustoms
+from SLHCUpgradeSimulations.Configuration.phase1TkCustoms import customise
+
+#call to customisation function customise imported from SLHCUpgradeSimulations.Configuration.phase1TkCustoms
+process = customise(process)
+
 # modify digitizer parameters
 #process.simSiPixelDigis.ThresholdInElectrons_BPix = 3500.0 
-process.mix.digitizers.pixel.ThresholdInElectrons_BPix = 3500.0 
+process.mix.digitizers.pixel.ThresholdInElectrons_BPix = 3500.0
+process.mix.digitizers.pixel.LorentzAngle_DB = False
+process.mix.digitizers.pixel.AddPixelInefficiencyFromPython = False
+process.mix.digitizers.pixel.useDB = False
 
 #This process is to run the digitizer, pixel gitizer is now clled by the mix module
 process.p1 = cms.Path(process.mix)

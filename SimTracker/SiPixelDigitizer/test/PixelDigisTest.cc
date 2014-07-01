@@ -150,7 +150,7 @@ private:
   TH1F *hblade1, *hblade2;
 
   //TH2F *htest, *htest2;
-  TH2F *hdetMap3,*hdetMap2,*hdetMap1, *hpixMap1, *hpixMap2, *hpixMap3,
+  TH2F *hdetMap4,*hdetMap3,*hdetMap2,*hdetMap1, *hpixMap1, *hpixMap2, *hpixMap3,
     * hpixMapNoise; 
 
   TH1F *hevent, *hlumi, *horbit, *hbx0, *hlumi0, *hlumi1,*hbx1,*hbx2,*hbx3,*hbx4,*hbx5,*hbx6;
@@ -310,6 +310,8 @@ void PixelDigisTest::beginJob() {
     hdetMap2->SetOption("colz");
     hdetMap3 = fs->make<TH2F>("hdetMap3"," ",9,-4.5,4.5,45,-22.5,22.5);
     hdetMap3->SetOption("colz");
+    hdetMap4 = fs->make<TH2F>("hdetMap4"," ",9,-4.5,4.5,45,-32.5,32.5);
+    hdetMap4->SetOption("colz");
     hpixMap1 = fs->make<TH2F>("hpixMap1"," ",416,0.,416.,160,0.,160.);
     hpixMap1->SetOption("colz");
     hpixMap2 = fs->make<TH2F>("hpixMap2"," ",416,0.,416.,160,0.,160.);
@@ -748,7 +750,15 @@ void PixelDigisTest::analyze(const edm::Event& iEvent,
 	    ++numberOfDetUnits3;
 	    hdigisPerDet3->Fill(float(numOfDigisPerDet3));
 	    numOfDigisPerDet3=0;
-	    
+	    cout << "layer 3" << endl;
+	  }  else if(layer==4) {
+	    //hladder3id->Fill(float(ladder));
+	    //hz3id->Fill(float(module));
+	    hdetMap4->Fill(float(module),float(ladder));
+	    ++numberOfDetUnits3;
+	    //hdigisPerDet3->Fill(float(numOfDigisPerDet3));
+	    //numOfDigisPerDet3=0;
+	    cout << "layer 4" << endl; 
 	  } // layer
 	} // if bpix	
       } // if valid

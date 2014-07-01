@@ -21,7 +21,7 @@ process.MessageLogger = cms.Service("MessageLogger",
 
 process.source = cms.Source("PoolSource",
     fileNames =  cms.untracked.vstring(
-    'file:/afs/cern.ch/work/d/dkotlins/public/MC/mu/pt100/digis/digis1.root'
+    'file:digis_phaseI_2019.root'
 #    'file:dummy_100.root'
     )
 )
@@ -34,8 +34,9 @@ process.TFileService = cms.Service("TFileService",
 #process.load("Geometry.TrackerSimData.trackerSimGeometryXML_cfi")
 #process.load("Geometry.CMSCommonData.cmsSimIdealGeometryXML_cfi")
 
-process.load("Configuration.StandardSequences.Geometry_cff")
+#process.load("Configuration.StandardSequences.Geometry_cff")
 process.load("Configuration.StandardSequences.MagneticField_38T_cff")
+process.load('Configuration.Geometry.GeometryExtended2019Reco_cff')
 # what is this?
 # process.load("Configuration.StandardSequences.Services_cff")
 
@@ -52,7 +53,10 @@ process.load("Configuration.StandardSequences.FrontierConditions_GlobalTag_cff")
 # 2012
 # process.GlobalTag.globaltag = 'GR_P_V40::All'
 # 2013 MC
-process.GlobalTag.globaltag = 'MC_70_V1::All'
+#process.GlobalTag.globaltag = 'MC_70_V1::All'
+# Other statements
+from Configuration.AlCa.GlobalTag import GlobalTag
+process.GlobalTag = GlobalTag(process.GlobalTag, 'auto:upgradePLS1', '')
 
 #process.load("Geometry.TrackerGeometryBuilder.trackerGeometry_cfi")
 #process.load("Geometry.TrackerNumberingBuilder.trackerNumberingGeometry_cfi")
