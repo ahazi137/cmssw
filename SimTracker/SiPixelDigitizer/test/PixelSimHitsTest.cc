@@ -257,8 +257,8 @@ void PixelSimHitsTest::beginJob() {
     htest2 = fs->make<TH2F>("htest2"," ",108,-27.,27.,60,0.,600.);  // global z versus eloss
     htest3 = fs->make<TH2F>("htest3"," ",240,-12.,12.,240,-12.,12.);  // x-y plane
     //htest4 = fs->make<TH2F>("htest4"," ",80,-4.,4.,100,-5.,5.);
-    htest6 = fs->make<TH2F>("htest4"," ",240,-65.,65.,240,-12.,12.);//z-y plane pilot
-    htest7 = fs->make<TH3F>("htest7"," ",240,-65.,-20.,240,-12.,12.,240,-12.,12.);//x-y-z plane pilot
+    htest6 = fs->make<TH2F>("htest6"," ",240,-65.,65.,240,-12.,12.);//z-y plane pilot
+    htest7 = fs->make<TH3F>("htest7"," ",240,-65.,65.,240,-12.,12.,240,-12.,12.);//x-y-z plane pilot
     //hp1 = fs->make<TProfile>("hp1"," ",50,0.,50.);    // default option
     //hp2 = fs->make<TProfile>("hp2"," ",50,0.,50.," "); // option set to " "
     //hp3 = fs->make<TProfile>("hp3"," ",50,0.,50.,-100.,100.); //
@@ -491,7 +491,7 @@ void PixelSimHitsTest::analyze(const edm::Event& iEvent,
      if(DEBUG) cout<<", global pos "<<gloX<<" "<<gloY<<" "<<gloR<<" "<<gloZ<<endl;
 
      htest3->Fill(gloX,gloY);
-     htest7->Fill(gloZ,gloX,gloY);
+     htest7->Fill(gloZ,gloX,gloY,100);
      htest6->Fill(gloZ,gloY,100);
        
      hdetunit->Fill(float(detId.rawId()));

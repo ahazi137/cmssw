@@ -498,8 +498,6 @@ SiPixelDigitizerAlgorithm::PixelAging::PixelAging(const edm::ParameterSet& conf,
 }
 
 //=========================================================================
-
-//=========================================================================
 void SiPixelDigitizerAlgorithm::accumulateSimHits(std::vector<PSimHit>::const_iterator inputBegin,
                                                   std::vector<PSimHit>::const_iterator inputEnd,
                                                   const PixelGeomDetUnit* pixdet,
@@ -911,7 +909,7 @@ void SiPixelDigitizerAlgorithm::drift(const PSimHit& hit,
       //std::cout <<"\nmoduleRadius= "<<moduleRadius<<" WITH K="<<kValue <<" wich scales the energy by "<<
       //            exp( -1*kValue*DriftDistance/moduleThickness )<<"\n" ;
     }
-    else if ((NumberOfBarrelLayers)&&(AddPixelAging)) kValue = float(pixel_aging(pixelAging_,pixdet,tTopo));
+    else if ((NumberOfBarrelLayers > 3)&&(AddPixelAging)) kValue = float(pixel_aging(pixelAging_,pixdet,tTopo));
     energyOnCollector = energyOnCollector * exp( -1*kValue*DriftDistance/moduleThickness );
 
 #ifdef TP_DEBUG
