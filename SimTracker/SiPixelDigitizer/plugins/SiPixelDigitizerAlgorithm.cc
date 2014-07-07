@@ -908,8 +908,13 @@ void SiPixelDigitizerAlgorithm::drift(const PSimHit& hit,
       kValue = pseudoRadDamage /(moduleRadius*moduleRadius);
       //std::cout <<"\nmoduleRadius= "<<moduleRadius<<" WITH K="<<kValue <<" wich scales the energy by "<<
       //            exp( -1*kValue*DriftDistance/moduleThickness )<<"\n" ;
+      std::cout << "raddam. kValue: " << kValue << std::endl;
     }
-    else if ((NumberOfBarrelLayers > 3)&&(AddPixelAging)) kValue = float(pixel_aging(pixelAging_,pixdet,tTopo));
+    else if ((NumberOfBarrelLayers > 3)&&(AddPixelAging)) {
+      kValue = float(pixel_aging(pixelAging_,pixdet,tTopo));
+      std::cout << "raddam. kValue from pixelaging: " << kValue << std::endl;
+    }
+    
     energyOnCollector = energyOnCollector * exp( -1*kValue*DriftDistance/moduleThickness );
 
 #ifdef TP_DEBUG
