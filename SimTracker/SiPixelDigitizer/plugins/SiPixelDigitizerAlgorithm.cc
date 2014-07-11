@@ -516,19 +516,19 @@ void SiPixelDigitizerAlgorithm::calculateInstlumiFactor(PileupMixingContent* puI
 	double instlumi = TrueInteractionList.at(p)*221.95;
 	double instlumi_pow=1.;
 	_pu_scale[i] = 0;
-	_pileUp = TrueInteractionList.at(p);
 	for  (size_t j=0; j<pixelEfficiencies_.thePUEfficiency_BPix[i].size(); j++){
 	  _pu_scale[i]+=instlumi_pow*pixelEfficiencies_.thePUEfficiency_BPix[i][j];
 	  instlumi_pow*=instlumi;
 	}
       }
+      _eventPileUp = TrueInteractionList.at(p);
     }
   } 
   else {
     for (int i=0; i<3;i++) {
       _pu_scale[i] = 1.;
-      _pileUp = 0.;
     }
+    _eventPileUp = 0.;
   }
 }
 
@@ -1357,7 +1357,7 @@ void SiPixelDigitizerAlgorithm::pixel_inefficiency(const PixelEfficiencies& eff,
        int module=tTopo->pxbModule(detID);
        if (module<=4) module=5-module;
        else module-=4;
-       if (floor(_pileUp) != 0)
+       if (floor(_eventPileUp) != 0)
        columnEfficiency *= eff.theLadderEfficiency_BPix[layerIndex-1][ladder-1]*eff.theModuleEfficiency_BPix[layerIndex-1][module-1]*_pu_scale[layerIndex-1];
     }
   } else {                // forward disks

@@ -155,8 +155,8 @@ process.GlobalTag.globaltag = 'POSTLS171_V1::All'
 
 process.o1 = cms.OutputModule("PoolOutputModule",
             outputCommands = cms.untracked.vstring('drop *','keep *_*_*_Test'),
-      fileName = cms.untracked.string('file:/afs/cern.ch/work/d/dkotlins/public/MC/mu/pt100_71_pre7/digis/digis2_postls171.root')
-#      fileName = cms.untracked.string('file:dummy.root')
+#      fileName = cms.untracked.string('file:/afs/cern.ch/work/d/dkotlins/public/MC/mu/pt100_71_pre7/digis/digis2_postls171.root')
+      fileName = cms.untracked.string('file:dummy.root')
 )
 
 process.g4SimHits.Generator.HepMCProductLabel = 'source'
