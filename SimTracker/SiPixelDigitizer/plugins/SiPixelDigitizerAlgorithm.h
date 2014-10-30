@@ -10,10 +10,17 @@
 #include "FWCore/Framework/interface/ESHandle.h"
 #include "SimDataFormats/EncodedEventId/interface/EncodedEventId.h"
 #include "SimDataFormats/TrackingHit/interface/PSimHit.h"
+#include "Geometry/CommonTopologies/interface/PixelTopology.h"
 #include "SimTracker/Common/interface/SimHitInfoForLinks.h"
 #include "DataFormats/Math/interface/approx_exp.h"
 #include "SimDataFormats/PileupSummaryInfo/interface/PileupMixingContent.h"
 
+//Radiation Damage Sim with Templates
+#include "SiPixelTemplate2D.h"
+#include <iostream>
+#include "boost/multi_array.hpp"
+typedef boost::multi_array<float, 2> array_2d;
+//END Radiation Damage Sim with Templates
 // forward declarations
 
 
@@ -345,6 +352,7 @@ class SiPixelDigitizerAlgorithm  {
     // pseudoRadDamage
     const double pseudoRadDamage;       // Decrease the amount off freed charge that reaches the collector
     const double pseudoRadDamageRadius; // Only apply pseudoRadDamage to pixels with radius<=pseudoRadDamageRadius
+    const bool UseTemplateAgeing;
     // The PDTable
     //HepPDTable *particleTable;
     //ParticleDataTable *particleTable;
@@ -371,6 +379,8 @@ class SiPixelDigitizerAlgorithm  {
                const std::vector<EnergyDepositUnit>& ionization_points,
                std::vector<SignalPoint>& collection_points) const;
     void induce_signal(const PSimHit& hit,
+		       const std::vector<PSimHit>::const_iterator inputBegin,
+		       const std::vector<PSimHit>::const_iterator inputEnd,
 		       const size_t hitIndex,
 		       const unsigned int tofBin,
                        const PixelGeomDetUnit *pixdet,
@@ -403,6 +413,20 @@ class SiPixelDigitizerAlgorithm  {
 
     void module_killing_conf(uint32_t detID); // remove dead modules using the list in the configuration file PixelDigi_cfi.py
     void module_killing_DB(uint32_t detID);  // remove dead modules uisng the list in the DB
+//Radiation Damage Sim with Templates
+    int PixelTempRewgt2D( int id_gen, int id_rewgt,
+			 std::vector<float>& track,
+			 array_2d& cluster,
+			 std::vector<bool>& ydouble,
+			 std::vector<bool>& xdouble,
+			 SiPixelTemplate2D& templ2D);
+    void hitSignalReweight(const PSimHit& hit,
+			   std::map< int, float, std::less<int> >& hit_signal,
+			   const size_t hitIndex,
+			   const unsigned int tofBin,
+			   const PixelTopology* topol,
+			   signal_map_type& theSignal);
+    //END Radiation Damage Sim with Templates
 
     const PixelEfficiencies pixelEfficiencies_;
 

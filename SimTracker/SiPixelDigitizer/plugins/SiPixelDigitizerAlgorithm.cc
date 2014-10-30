@@ -104,6 +104,30 @@ using namespace sipixelobjects;
 
 #define TP_DEBUG // protect all LogDebug with ifdef. Takes too much CPU
 
+//Radiation Damage Sim with Templates
+typedef boost::multi_array<float, 2> array_2d;
+
+double icol_min, irow_min, icol_max, irow_max;
+
+
+std::vector<bool> xdouble(TXSIZE), ydouble(TYSIZE);
+std::vector<float> track(6);
+// P is track position and D is track direction
+float Px, Py, Pz, Dx, Dy, Dz;
+float PixeltoUmX = 100;
+float PixeltoUmY = 150;
+float PixeltoUmZ = 285;
+
+int ID0, ID1;
+int ierr;
+double irow_cent, icol_cent;
+int row_pix, col_pix;
+SiPixelTemplate2D templ2D;
+array_2d pixrewgt(boost::extents[TXSIZE][TYSIZE]);
+
+
+
+//END Radiation Damage Sim with Templates
 
 void SiPixelDigitizerAlgorithm::init(const edm::EventSetup& es) {
   if(use_ineff_from_db_){// load gain calibration service fromdb...
@@ -119,6 +143,15 @@ void SiPixelDigitizerAlgorithm::init(const edm::EventSetup& es) {
   //gets the map and geometry from the DB (to kill ROCs)
   es.get<SiPixelFedCablingMapRcd>().get(map_);
   es.get<TrackerDigiGeometryRecord>().get(geom_);
+
+  //Radiation Damage Sim with Templates
+  ID0 = 28; ID1 = 26;
+  
+  templ2D.pushfile(ID0);
+  templ2D.pushfile(ID1);
+ 
+  //END Radiation Damage Sim with Templates
+
 }
 
 //=========================================================================
@@ -232,7 +265,7 @@ SiPixelDigitizerAlgorithm::SiPixelDigitizerAlgorithm(const edm::ParameterSet& co
   // Add some pseudo-red damage
   pseudoRadDamage(conf.exists("PseudoRadDamage")?conf.getParameter<double>("PseudoRadDamage"):double(0.0)),
   pseudoRadDamageRadius(conf.exists("PseudoRadDamageRadius")?conf.getParameter<double>("PseudoRadDamageRadius"):double(0.0)),
-
+  UseTemplateAgeing(conf.exists("UseTemplateAgeing")?conf.getParameter<bool>("UseTemplateAgeing"):false),
   // delta cutoff in MeV, has to be same as in OSCAR(0.030/cmsim=1.0 MeV
   //tMax(0.030), // In MeV.
   //tMax(conf.getUntrackedParameter<double>("DeltaProductionCut",0.030)),
@@ -448,6 +481,381 @@ SiPixelDigitizerAlgorithm::PixelEfficiencies::PixelEfficiencies(const edm::Param
   }
 }
 
+// *******************************************************************************************************
+//! Reweight CMSSW clusters to look like clusters corresponding to Pixelav Templates.     
+//! \param       id_in - (input) identifier of the template corresponding to the input events                                 
+//! \param    id_rewgt - (input) identifier of the template corresponding to the output events                                 
+//! \param       track - (input) the position [0-2] and direction [3-5] of the primary particle
+//! \param     cluster - (input/output) boost multi_array container of 7x21 array of pixel signals, 
+//!                       origin of local coords (0,0) at center of pixel cluster[3][10].                      
+//! \param     ydouble - (input) STL vector of 21 element array to flag a double-pixel
+//! \param     xdouble - (input) STL vector of 7 element array to flag a double-pixel
+//! \param     templ2D - (input) the template used in the reconstruction
+//! returns 0 if everything is OK, 1 if angles are outside template coverage (cluster is probably still
+//! usable, > 1 if something is wrong (no reweight done).
+// *******************************************************************************************************
+int SiPixelDigitizerAlgorithm::PixelTempRewgt2D(int id_in, int id_rewgt, std::vector<float>& track, array_2d& cluster,
+					     std::vector<bool>& ydouble, std::vector<bool>& xdouble, SiPixelTemplate2D& templ2D)
+{
+  // Local variables 
+  int i, j, k, l, kclose;
+  int nclusx, nclusy, success;
+  float xsize, ysize, zsize, q50i, q10i, q100i, q50r, q10r, q100r, xhit2D, yhit2D, qclust, dist2, dmin2;
+  //   float qfrac, renorm;
+  float xy_in[BXM2][BYM2], xy_rewgt[BXM2][BYM2], xy_clust[TXSIZE][TYSIZE];
+  int denx_clust[TXSIZE][TYSIZE], deny_clust[TXSIZE][TYSIZE];
+  int goodWeightsUsed, nearbyWeightsUsed, noWeightsUsed;
+  float cotalpha, cotbeta; 
+  // success = 0 is returned if everthing is OK
+  success = 0;
+    
+  // Copy the array to remember original charges
+  array_2d clust(cluster);
+    
+  // Take the pixel dimensions from the 2D template
+  xsize = templ2D.xsize();
+  ysize = templ2D.ysize();
+  zsize = templ2D.zsize();
+
+  if(0){std::cout << zsize << std::endl;};
+  // Calculate the track angles
+    
+  if (track[5] > 0.){
+    cotalpha = track[3]/track[5]; //if track[5] (direction in z) is 0 the hit is not processed by re-weighting
+    cotbeta = track[4]/track[5];
+  } else return 9; //returned value here indicates that no reweighting was done in this case
+
+  // The 2-D templates are defined on a shifted coordinate system wrt the 1D templates
+  if(ydouble[0]) {
+    yhit2D = track[1] - cotbeta*track[2] + ysize;
+  } else {
+    yhit2D = track[1] - cotbeta*track[2] + 0.5*ysize;
+  }
+  if(xdouble[0]) {
+    xhit2D = track[0] - cotalpha*track[2] + xsize;
+  } else {
+    xhit2D = track[0] - cotalpha*track[2] + 0.5*xsize;
+  }
+	
+  // Zero the input and output templates
+  for(i=0; i<BYM2; ++i) {
+    for(j=0; j<BXM2; ++j) {
+      xy_in[j][i] = 0.;
+      xy_rewgt[j][i] = 0.;
+    }
+  }
+	
+  std::cout << "Hit 2D: " << xhit2D << "  " << yhit2D << std::endl;
+
+  // Next, interpolate the CMSSW template needed to analyze this cluster     
+
+  //std::cout << "XY in:" << std::endl;
+  if(!templ2D.xytemp(id_in, cotalpha, cotbeta, xhit2D, yhit2D, ydouble, xdouble, xy_in)) {success = 1;}
+	
+  q50i = templ2D.s50();
+  //q50i = 0;
+  q100i = 2.*q50i;
+  q10i = 0.2*q50i;
+	
+  if(0){std::cout << q10i << std::endl;};
+  // Check that the cluster container is a 13x21 matrix
+	
+  if(cluster.num_dimensions() != 2) {return 3;}
+  nclusx = (int)cluster.shape()[0];
+  nclusy = (int)cluster.shape()[1];
+  if(nclusx != TXSIZE || xdouble.size() != TXSIZE) {return 4;}
+  if(nclusy != TYSIZE || ydouble.size() != TYSIZE) {return 5;}
+	
+  // Sum initial charge in the cluster   
+	
+  qclust = 0.;
+  for(i=0; i<TYSIZE; ++i) {
+    for(j=0; j<TXSIZE; ++j) {
+      xy_clust[j][i] = 0.;
+      denx_clust[j][i] = 0;
+      deny_clust[j][i] = 0;
+      if(cluster[j][i] > q100i) {
+	qclust += cluster[j][i];
+      }
+    }
+  }
+	
+  // Store the charge fraction for later use
+	
+  //	qfrac = qclust/templ2D.qavg();
+	
+  // Next, interpolate the physical output template needed to reweight     
+
+  std::cout << "XY Reweight:" << std::endl;
+  if(!templ2D.xytemp(id_rewgt, cotalpha, cotbeta, xhit2D, yhit2D, ydouble, xdouble, xy_rewgt)) {success = 1;}
+    
+  q50r = templ2D.s50();
+  //q50r = 0;
+  q100r = 2.*q50r;
+  q10r = 0.2*q50r;
+
+	
+  // Find all non-zero denominator pixels in the input template and generate "inside" weights
+				   
+  int ntpix = 0;
+  int ncpix = 0;
+  std::vector<int> ytclust;
+  std::vector<int> xtclust;
+  std::vector<int> ycclust;
+  std::vector<int> xcclust;
+  qclust = 0.;
+  for(i=0; i<TYSIZE; ++i) {
+    for(j=0; j<TXSIZE; ++j) {
+      if(xy_in[j+1][i+1] > q100i) {
+	++ntpix;
+	ytclust.push_back(i);
+	xtclust.push_back(j);
+	xy_clust[j][i] = xy_rewgt[j+1][i+1]/xy_in[j+1][i+1];
+	denx_clust[j][i] = j;
+	deny_clust[j][i] = i;
+      }
+    }
+  }
+  
+  std::cout << "Thresh. Unirr:  " << q100i << std::endl;
+  std::cout << "Thresh. Irr.:  " << q10r << std::endl;
+  
+  // Find all non-zero numerator pixels not matched to denominator in the output template and generate "inside" weights
+    
+  for(i=0; i<TYSIZE; ++i) {
+    for(j=0; j<TXSIZE; ++j) {
+      if(xy_rewgt[j+1][i+1] > q10r && xy_clust[j][i] == 0. && ntpix>0) {
+	// Search for nearest denominator pixel
+	dmin2 = 10000.; kclose = 0;
+	for(k=0; k<ntpix; ++k) {
+	  dist2=(i-ytclust[k])*(i-ytclust[k])+0.44444*(j-xtclust[k])*(j-xtclust[k]);
+	  if(dist2 < dmin2) {dmin2 = dist2; kclose = k;}
+	}
+	xy_clust[j][i] = xy_rewgt[j+1][i+1]/xy_in[xtclust[kclose]+1][ytclust[kclose]+1];
+	denx_clust[j][i] = xtclust[kclose];
+	deny_clust[j][i] = ytclust[kclose];
+      }
+    }
+  }
+
+  
+  std::cout << "Weights:" << std::endl;
+  for(i=0; i<TYSIZE; ++i) {
+    for(j=0; j<TXSIZE; ++j) {
+      std::cout << xy_clust[j][i] << "  ";
+    }
+    std::cout << std::endl;
+  }
+  
+  
+	
+  // Do the reweighting
+  goodWeightsUsed = 0;
+  nearbyWeightsUsed = 0;
+  noWeightsUsed = 0;
+
+  for(i=0; i<TYSIZE; ++i) {
+    for(j=0; j<TXSIZE; ++j) {
+      if(xy_clust[j][i] > 0.) {
+	cluster[j][i] = xy_clust[j][i]*clust[denx_clust[j][i]][deny_clust[j][i]];
+	if(cluster[j][i] > q100r) {qclust += cluster[j][i];}
+	if(cluster[j][i] > 0) {goodWeightsUsed++;}
+      } else {
+	if(clust[j][i] > 0.) {
+	  ++ncpix;
+	  ycclust.push_back(i);
+	  xcclust.push_back(j);
+	}
+      }
+    }
+  }
+					   
+  // Now reweight pixels outside of template footprint using closest weights
+
+  if(ncpix > 0) {
+    for(l=0; l<ncpix; ++l) {
+      i=ycclust[l]; j=xcclust[l];
+      dmin2 = 10000.; kclose = 0;
+      for(k=0; k<ntpix; ++k) {
+	dist2=(i-ytclust[k])*(i-ytclust[k])+0.44444*(j-xtclust[k])*(j-xtclust[k]);
+	if(dist2 < dmin2) {dmin2 = dist2; kclose = k;}
+      }
+      if(dmin2 < 5.) {
+	nearbyWeightsUsed++;
+	cluster[j][i] *= xy_clust[xtclust[kclose]][ytclust[kclose]];
+	if(cluster[j][i] > q100r) {qclust += cluster[j][i];}
+      } else {
+	noWeightsUsed++;
+	cluster[j][i] = 0.;
+      }
+    }
+  }
+
+  std::cout << "Good Weight Used: " << goodWeightsUsed << std::endl;
+  std::cout << "Nearby Weight Used: " << nearbyWeightsUsed << std::endl;
+  std::cout << "No Weight Used: " << noWeightsUsed << std::endl;
+
+  return success;
+} // PixelTempRewgt2D 
+
+
+void SiPixelDigitizerAlgorithm::hitSignalReweight(const PSimHit& hit, 
+						  std::map< int, float, std::less<int> >& hit_signal, 
+						  const size_t hitIndex,
+						  const unsigned int tofBin,
+						  const PixelTopology* topol,
+						  signal_map_type& theSignal){
+
+  irow_min = topol->nrows();
+  irow_max = 0;
+  icol_min = topol->ncolumns();
+  icol_max = 0;
+	   
+  float chargeBefore = 0;
+  float chargeAfter = 0;
+  signal_map_type hitSignal;
+  LocalVector direction = hit.exitPoint() - hit.entryPoint();
+  
+  for ( std::map< int, float, std::less<int> >::const_iterator im = hit_signal.begin(); im != hit_signal.end(); ++im) {
+    int chan =  (*im).first;
+    std::pair<int,int> pixelWithCharge = PixelDigi::channelToPixel( chan);
+    std::cout << "PixelHit - x: " << pixelWithCharge.first << " y: " << pixelWithCharge.second << "  With Charge:  " << (*im).second <<  std::endl;
+    
+    hitSignal[chan] += (makeDigiSimLinks_ ? Amplitude( (*im).second, &hit, hitIndex, tofBin, (*im).second) : Amplitude( (*im).second, (*im).second) )  ;
+    chargeBefore += (*im).second;
+    
+    if(pixelWithCharge.first < irow_min)
+      irow_min = pixelWithCharge.first;
+    if(pixelWithCharge.first > irow_max)
+      irow_max = pixelWithCharge.first;
+    if(pixelWithCharge.second < icol_min)
+      icol_min = pixelWithCharge.second;
+    if(pixelWithCharge.second > icol_max)
+      icol_max = pixelWithCharge.second;
+  }
+  
+  LocalPoint hitEntryPoint = hit.entryPoint();
+  
+  float trajectoryScaleToPosition = hitEntryPoint.z()/direction.z();
+  
+  if( (hitEntryPoint.z() > 0 && direction.z() < 0) || (hitEntryPoint.z() < 0 && direction.z() > 0) ){
+    trajectoryScaleToPosition *= -1;
+  }
+  
+  LocalPoint hitPosition = hitEntryPoint + trajectoryScaleToPosition * direction;  
+	   
+  MeasurementPoint hitPositionPixel = topol->measurementPosition(hit.localPosition() );
+  LocalPoint CMSSWhitPosition = hit.localPosition();
+  std::pair<int,int> hitPixel = std::pair<int,int>( int( floor(hitPositionPixel.x() ) ), int ( floor(hitPositionPixel.y() ) )); 
+  
+  MeasurementPoint originPixel = MeasurementPoint(hitPixel.first - THX + 0.5, hitPixel.second - THY + 0.5);
+  LocalPoint origin = topol->localPosition(originPixel);
+  
+  MeasurementPoint hitEntryPointPixel = topol->measurementPosition(hit.entryPoint() );
+  MeasurementPoint hitExitPointPixel = topol->measurementPosition(hit.exitPoint() );
+  
+  std::cout << std::endl;
+  std::cout << "Particle ID is: " << hit.particleType() << std::endl;
+  std::cout << "Process type: " << hit.processType() << std::endl;
+  std::cout << "HitPosition:" << std::endl;
+  std::cout << "Pixel Pos - X: " << hitPositionPixel.x() << "Y: " << hitPositionPixel.y() << std::endl;
+  std::cout << "Cart.Cor. - X: " << CMSSWhitPosition.x() << "Y: " << CMSSWhitPosition.y() << std::endl;
+  std::cout << "Z=0 Pos - X: " << hitPosition.x() << "Y: " << hitPosition.y() << std::endl;
+  
+  std::cout << "Origin:" << std::endl;
+  std::cout << "Pixel Pos - X: " << originPixel.x() << "Y: " << originPixel.y() << std::endl;
+  std::cout << "Cart.Cor. - X: " << origin.x() << "Y: " << origin.y() << std::endl;
+  std::cout << std::endl;
+  std::cout << "Entry/Exit:" << std::endl;
+  std::cout << "Entry - X: " << hit.entryPoint().x() << "Y: " << hit.entryPoint().y() << "Z: " << hit.entryPoint().z() << std::endl;
+  std::cout << "Exit - X: " << hit.exitPoint().x() << "Y: " << hit.exitPoint().y() << "Z: " << hit.exitPoint().z() << std::endl;
+  
+  std::cout << "Entry - X Pixel: " << hitEntryPointPixel.x() << "Y Pixel: " << hitEntryPointPixel.y() << std::endl;
+  std::cout << "Exit - X Pixel: " << hitExitPointPixel.x() << "Y Pixel: " << hitExitPointPixel.y() << std::endl;
+  
+  std::cout << "row min: " << irow_min << "col min: " << icol_min << std::endl;
+	   
+  float cmToMicrons = 10000;
+  
+  track[0] = (hitPosition.x() - origin.x() )*cmToMicrons;
+  track[1] = (hitPosition.y() - origin.y() )*cmToMicrons;
+  track[2] = 0.0; //Middle of sensor is origin for Z-axis
+  track[3] = direction.x(); track[4] = direction.y(); track[5] = direction.z();
+  
+  int clusterSizeX = irow_max+1 - irow_min;
+  int clusterSizeY = icol_max+1 - icol_min;
+  
+  std::cout << "Cluster Size: " << clusterSizeX << " " << clusterSizeY << std::endl;
+  
+  for(int row = 0; row < TXSIZE; ++row) {
+    for(int col = 0; col < TYSIZE; ++col) {
+      pixrewgt[row][col] = 0;
+    }
+  }
+  
+  for(int row = 0; row < TXSIZE; ++row) {
+    xdouble[row] = topol->isItBigPixelInX(hitPixel.first + row - THX);
+    if(xdouble[row])
+      std::cout << "BigPixel found in row " << row << std::endl; 
+  }
+  
+  for(int col = 0; col < TYSIZE; ++col) {
+    ydouble[col] = topol->isItBigPixelInY(hitPixel.second + col - THY);
+    if(ydouble[col])
+	       std::cout << "BigPixel found in col " << col << std::endl; 
+  }
+  
+  for(int row = 0; row < TXSIZE; ++row) {
+    for(int col = 0; col < TYSIZE; ++col) {
+      //Fill charges into 21x13 Pixel Array with hitPixel in centre
+      pixrewgt[row][col] = hitSignal[PixelDigi::pixelToChannel(hitPixel.first + row - THX, hitPixel.second + col - THY)];
+    }
+  }
+  
+  std::cout << "Hit Position relative to Top-left of PixelArray in Template in um - x: " << track[0] << " y: " << track[1] << std::endl;
+  std::cout << "Track angle is - x: " << track[3] << " y: " << track[4] << " z: " << track[5] << std::endl;
+  
+  std::cout << "Template before reweighting: " << std::endl;
+  
+  
+  for(int col = 0; col < TYSIZE; ++col) {
+    for(int row = 0; row < TXSIZE; ++row) {
+      std::cout << pixrewgt[row][col] << "  ";
+    }
+    std::cout << std::endl;
+  }
+  //for unirradiated: 2nd argument is ID0, for irradiated: ID1
+  ierr = PixelTempRewgt2D(ID0, ID1, track, pixrewgt, ydouble, xdouble, templ2D);
+ 
+  std::cout << "Template after reweighting: " << std::endl;
+  
+  for(int col = 0; col < TYSIZE; ++col) {
+    for(int row = 0; row < TXSIZE; ++row) {	
+      std::cout << pixrewgt[row][col] << "  ";
+    }
+    std::cout << std::endl;
+  }
+  
+  
+  for(int row = 0; row < TXSIZE; ++row) {	 
+    for(int col = 0; col < TYSIZE; ++col) {
+      float charge = 0;
+      charge = pixrewgt[row][col];
+      chargeAfter += charge;
+      if( (hitPixel.first + row - THX) >= 0 && (hitPixel.first + row - THX) < topol->nrows() && (hitPixel.second + col - THY) >= 0 && (hitPixel.second + col - THY) < topol->ncolumns() && charge > 0)
+	theSignal[PixelDigi::pixelToChannel(hitPixel.first + row - THX, hitPixel.second + col - THY)] += (makeDigiSimLinks_ ? Amplitude(charge , &hit, hitIndex, tofBin, charge) : Amplitude( charge, charge) )  ;
+    }
+  }
+  
+  if((1 - chargeAfter/chargeBefore)*100 > 2)
+    std::cout << "Large charge loss!" << std::endl;
+  if(chargeBefore > 0.01)
+    std::cout << "Chargeloss ratio is " << chargeAfter/chargeBefore * 100 << std::endl;
+  else
+    std::cout << "Chargeloss ratio is " << 100 << std::endl;  
+
+}
+
 //=========================================================================
 void SiPixelDigitizerAlgorithm::accumulateSimHits(std::vector<PSimHit>::const_iterator inputBegin,
                                                   std::vector<PSimHit>::const_iterator inputEnd,
@@ -487,7 +895,7 @@ void SiPixelDigitizerAlgorithm::accumulateSimHits(std::vector<PSimHit>::const_it
 	primary_ionization(*ssbegin, ionization_points, engine); // fills _ionization_points
 	drift(*ssbegin, pixdet, bfield, ionization_points, collection_points);  // transforms _ionization_points to collection_points
 	// compute induced signal on readout elements and add to _signal
-	induce_signal(*ssbegin, simHitGlobalIndex, tofBin, pixdet, collection_points); // 1st 3 args needed only for SimHit<-->Digi link
+	induce_signal(*ssbegin, inputBegin, inputEnd, simHitGlobalIndex, tofBin, pixdet, collection_points); // 1st 3 args needed only for SimHit<-->Digi link
       } //  end if
     } // end for
 
@@ -880,6 +1288,8 @@ void SiPixelDigitizerAlgorithm::drift(const PSimHit& hit,
 //*************************************************************************
 // Induce the signal on the collection plane of the active sensor area.
 void SiPixelDigitizerAlgorithm::induce_signal(const PSimHit& hit,
+					      std::vector<PSimHit>::const_iterator inputBegin,
+					      std::vector<PSimHit>::const_iterator inputEnd,
 					      const size_t hitIndex,
 					      const unsigned int tofBin,
 			                      const PixelGeomDetUnit* pixdet,
@@ -1092,19 +1502,218 @@ void SiPixelDigitizerAlgorithm::induce_signal(const PSimHit& hit,
   } // loop over charge distributions
 
   // Fill the global map with all hit pixels from this event
-
-  for ( hit_map_type::const_iterator im = hit_signal.begin();
-	im != hit_signal.end(); ++im) {
-    int chan =  (*im).first;
-    theSignal[chan] += (makeDigiSimLinks_ ? Amplitude( (*im).second, &hit, hitIndex, tofBin, (*im).second) : Amplitude( (*im).second, (*im).second) )  ;
-
+  
+   LocalVector direction = hit.exitPoint() - hit.entryPoint();
+   //std::cout << "The drift length is " << direction.mag() * 10000 << " microns!!!" << std::endl;
+   
+   direction = direction.unit();
+   std::cout << "Direction vector - X: " << direction.x() << " Y: " << direction.y() << " Z: " << direction.z() << std::endl;
+   
+   if(!UseTemplateAgeing) { //default setting without charge re-weighting
+     for ( hit_map_type::const_iterator im = hit_signal.begin(); im != hit_signal.end(); ++im) {
+       int chan =  (*im).first;
+       theSignal[chan] += (makeDigiSimLinks_ ? Amplitude( (*im).second, &hit,  hitIndex, tofBin,(*im).second) : Amplitude( (*im).second, (*im).second) )  ;
+       
 #ifdef TP_DEBUG
-    std::pair<int,int> ip = PixelDigi::channelToPixel(chan);
-    LogDebug ("Pixel Digitizer")
-      << " pixel " << ip.first << " " << ip.second << " "
-      << theSignal[chan];
+       std::pair<int,int> ip = PixelDigi::channelToPixel(chan);
+       LogDebug ("Pixel Digitizer") << " pixel no temp " << ip.first << " " << ip.second << " "
+				    << theSignal[chan];
 #endif
-  }
+     }
+   }
+   else if ((UseTemplateAgeing) && (hit.processType() == 0)){ //use re-weighting for primary processes
+     
+     hitSignalReweight (hit, hit_signal, hitIndex, tofBin, topol, theSignal);
+     
+   }
+   else if ((UseTemplateAgeing) && (hit.processType() != 0)){ //use re-weighting for secondaries
+     // std::cout << "Non-primary process!" << std::endl;
+     
+     // LocalVector direction = hit.exitPoint() - hit.entryPoint();   
+     // float length = direction.mag() * 10000;
+     
+     if (std::abs(hit.particleType()) == 11){ //we are looking for delta rays here which remain in sensor	    
+       for (std::vector<PSimHit>::const_iterator ibegin = inputBegin; ibegin != inputEnd; ++ibegin) {
+	 // we want to match the actual secondary hit with its parent primary hit      
+	 //when its done, we use its position and direction later instead of the actual secondary hits information
+	 if ( (hit.trackId() == (*ibegin).trackId())&&((*ibegin).processType() == 0) ){
+	   hitSignalReweight ((*ibegin), hit_signal, hitIndex, tofBin, topol, theSignal);
+	 }
+       }
+     }
+   }
+   
+  //  LocalVector direction = hit.exitPoint() - hit.entryPoint();
+//    std::cout << "The drift length is " << direction.mag() * 10000 << " microns!!!" << std::endl;
+   
+//    direction = direction.unit();
+//    std::cout << "Direction vector - X: " << direction.x() << " Y: " << direction.y() << " Z: " << direction.z() << std::endl;
+//    //if(!UseTemplateAgeing || fabs(direction.z()) <= 0.005){
+//    if(!UseTemplateAgeing || hit.processType() != 0){
+//      for ( hit_map_type::const_iterator im = hit_signal.begin();
+// 	   im != hit_signal.end(); ++im) {
+//        int chan =  (*im).first;
+//     theSignal[chan] += (makeDigiSimLinks_ ? Amplitude( (*im).second, &hit, hitIndex, tofBin, (*im).second) : Amplitude( (*im).second, (*im).second) )  ;
+    
+// #ifdef TP_DEBUG
+//     std::pair<int,int> ip = PixelDigi::channelToPixel(chan);
+//     LogDebug ("Pixel Digitizer")
+//       << " pixel " << ip.first << " " << ip.second << " "
+//       << theSignal[chan];
+// #endif
+//      }
+//    }
+//    else{
+//      irow_min = topol->nrows();
+//      irow_max = 0;
+//      icol_min = topol->ncolumns();
+//      icol_max = 0;
+
+//      float chargeBefore = 0;
+//      float chargeAfter = 0;
+//      signal_map_type hitSignal;
+     
+//      for ( hit_map_type::const_iterator im = hit_signal.begin(); im != hit_signal.end(); ++im) {
+//        int chan =  (*im).first;
+//        std::pair<int,int> pixelWithCharge = PixelDigi::channelToPixel( chan);
+//        std::cout << "PixelHit - x: " << pixelWithCharge.first << " y: " << pixelWithCharge.second << "  With Charge:  " << (*im).second <<  std::endl;
+
+//        hitSignal[chan] += (makeDigiSimLinks_ ? Amplitude( (*im).second, &hit, hitIndex, tofBin, (*im).second) : Amplitude( (*im).second, (*im).second) )  ;
+//        chargeBefore += (*im).second;
+       
+//        if(pixelWithCharge.first < irow_min)
+// 	 irow_min = pixelWithCharge.first;
+//        if(pixelWithCharge.first > irow_max)
+// 	 irow_max = pixelWithCharge.first;
+//        if(pixelWithCharge.second < icol_min)
+// 	 icol_min = pixelWithCharge.second;
+//        if(pixelWithCharge.second > icol_max)
+// 	 icol_max = pixelWithCharge.second;
+//      }
+
+//      LocalPoint hitEntryPoint = hit.entryPoint();
+    
+//      float trajectoryScaleToPosition = hitEntryPoint.z()/direction.z();
+
+//      if( (hitEntryPoint.z() > 0 && direction.z() < 0) || (hitEntryPoint.z() < 0 && direction.z() > 0) ){
+//        trajectoryScaleToPosition *= -1;
+//      }
+
+//      LocalPoint hitPosition = hitEntryPoint + trajectoryScaleToPosition * direction;
+     
+     
+//      MeasurementPoint hitPositionPixel = topol->measurementPosition(hit.localPosition() );
+//      LocalPoint CMSSWhitPosition = hit.localPosition();
+//      std::pair<int,int> hitPixel = std::pair<int,int>( int( floor(hitPositionPixel.x() ) ), int ( floor(hitPositionPixel.y() ) )); 
+
+//      MeasurementPoint originPixel = MeasurementPoint(hitPixel.first - THX + 0.5, hitPixel.second - THY + 0.5);
+//      LocalPoint origin = topol->localPosition(originPixel);
+     
+//      MeasurementPoint hitEntryPointPixel = topol->measurementPosition(hit.entryPoint() );
+//      MeasurementPoint hitExitPointPixel = topol->measurementPosition(hit.exitPoint() );
+     
+//      std::cout << std::endl;
+//      std::cout << "Particle ID is: " << hit.particleType() << std::endl;
+//      std::cout << "Process type: " << hit.processType() << std::endl;
+//      std::cout << "HitPosition:" << std::endl;
+//      std::cout << "Pixel Pos - X: " << hitPositionPixel.x() << "Y: " << hitPositionPixel.y() << std::endl;
+//      std::cout << "Cart.Cor. - X: " << CMSSWhitPosition.x() << "Y: " << CMSSWhitPosition.y() << std::endl;
+//      std::cout << "Z=0 Pos - X: " << hitPosition.x() << "Y: " << hitPosition.y() << std::endl;
+
+//      std::cout << "Origin:" << std::endl;
+//      std::cout << "Pixel Pos - X: " << originPixel.x() << "Y: " << originPixel.y() << std::endl;
+//      std::cout << "Cart.Cor. - X: " << origin.x() << "Y: " << origin.y() << std::endl;
+//      std::cout << std::endl;
+//      std::cout << "Entry/Exit:" << std::endl;
+//      std::cout << "Entry - X: " << hit.entryPoint().x() << "Y: " << hit.entryPoint().y() << "Z: " << hit.entryPoint().z() << std::endl;
+//      std::cout << "Exit - X: " << hit.exitPoint().x() << "Y: " << hit.exitPoint().y() << "Z: " << hit.exitPoint().z() << std::endl;
+
+//      std::cout << "Entry - X Pixel: " << hitEntryPointPixel.x() << "Y Pixel: " << hitEntryPointPixel.y() << std::endl;
+//      std::cout << "Exit - X Pixel: " << hitExitPointPixel.x() << "Y Pixel: " << hitExitPointPixel.y() << std::endl;
+     
+     
+//      std::cout << "row min: " << irow_min << "col min: " << icol_min << std::endl;
+
+//      float cmToMicrons = 10000;
+     
+//      track[0] = (hitPosition.x() - origin.x() )*cmToMicrons;
+//      track[1] = (hitPosition.y() - origin.y() )*cmToMicrons;
+//      track[2] = 0.0; //Middle of sensor is origin for Z-axis
+//      track[3] = direction.x(); track[4] = direction.y(); track[5] = direction.z();
+
+//      int clusterSizeX = irow_max+1 - irow_min;
+//      int clusterSizeY = icol_max+1 - icol_min;
+
+//      std::cout << "Cluster Size: " << clusterSizeX << " " << clusterSizeY << std::endl;
+     
+//      for(int row = 0; row < TXSIZE; ++row) {
+//        for(int col = 0; col < TYSIZE; ++col) {
+// 	 pixrewgt[row][col] = 0;
+//        }
+//      }
+
+//      for(int row = 0; row < TXSIZE; ++row) {
+//        xdouble[row] = topol->isItBigPixelInX(hitPixel.first + row - THX);
+//        if(xdouble[row])
+// 	 std::cout << "BigPixel found in row " << row << std::endl; 
+//      }
+
+//      for(int col = 0; col < TYSIZE; ++col) {
+//        ydouble[col] = topol->isItBigPixelInY(hitPixel.second + col - THY);
+//        if(ydouble[col])
+// 	 std::cout << "BigPixel found in col " << col << std::endl; 
+//      }
+
+//      for(int row = 0; row < TXSIZE; ++row) {
+//        for(int col = 0; col < TYSIZE; ++col) {
+// 	 //Fill charges into 21x13 Pixel Array with hitPixel in centre
+// 	 pixrewgt[row][col] = hitSignal[PixelDigi::pixelToChannel(hitPixel.first + row - THX, hitPixel.second + col - THY)];
+//        }
+//      }
+     
+//      std::cout << "Hit Position relative to Top-left of PixelArray in Template in um - x: " << track[0] << " y: " << track[1] << std::endl;
+//      std::cout << "Track angle is - x: " << track[3] << " y: " << track[4] << " z: " << track[5] << std::endl;
+     
+//      std::cout << "Template before reweighting: " << std::endl;
+     
+     
+//      for(int col = 0; col < TYSIZE; ++col) {
+//        for(int row = 0; row < TXSIZE; ++row) {
+// 	 std::cout << pixrewgt[row][col] << "  ";
+//        }
+//        std::cout << std::endl;
+//      }
+     
+//      ierr = PixelTempRewgt2D(pixdet, ID0, ID1, track, pixrewgt, ydouble, xdouble, templ2D);
+     
+
+//      std::cout << "Template after reweighting: " << ierr << std::endl;
+     
+//      for(int col = 0; col < TYSIZE; ++col) {
+//        for(int row = 0; row < TXSIZE; ++row) {	
+// 	 std::cout << pixrewgt[row][col] << "  ";
+//        }
+//        std::cout << std::endl;
+//      }
+     
+
+//      for(int row = 0; row < TXSIZE; ++row) {	 
+//        for(int col = 0; col < TYSIZE; ++col) {
+// 	 float charge = 0;
+// 	 charge = pixrewgt[row][col];
+// 	 chargeAfter += charge;
+// 	 if( (hitPixel.first + row - THX) >= 0 && (hitPixel.first + row - THX) < topol->nrows() && (hitPixel.second + col - THY) >= 0 && (hitPixel.second + col - THY) < topol->ncolumns() && charge > 0)
+// 	   theSignal[PixelDigi::pixelToChannel(hitPixel.first + row - THX, hitPixel.second + col - THY)] += (makeDigiSimLinks_ ? Amplitude(charge , &hit, hitIndex, tofBin, charge) : Amplitude( charge, charge) )  ;
+//        }
+//      }
+     
+//      if((1 - chargeAfter/chargeBefore)*100 > 2)
+//        std::cout << "Large charge loss!" << std::endl;
+//      if(chargeBefore > 0.01)
+//        std::cout << "Chargeloss ratio is " << chargeAfter/chargeBefore * 100 << std::endl;
+//      else
+//        std::cout << "Chargeloss ratio is " << 100 << std::endl;  
+//   }
 
 } // end induce_signal
 
@@ -1142,7 +1751,14 @@ void SiPixelDigitizerAlgorithm::make_digis(float thePixelThresholdInE,
     //if(doMissCalibrate) signalInElectrons = missCalibrate(signalInElectrons)
 
     // Do only for pixels above threshold
-
+    unsigned int Sub_detidd=DetId(detID).subdetId();//////
+      if(Sub_detidd == PixelSubdetector::PixelBarrel){ // Barrel modules
+	int layer = tTopo->pxbLayer(detID);
+	int ladder = tTopo->pxbLadder(detID);
+	int module = tTopo->pxbModule(detID);
+	std::cout << "signal in e: " <<  signalInElectrons << " layer " << layer 
+		  << " ladder "  << ladder << " module  "<<module<<std::endl;
+      }//////
     if( signalInElectrons >= thePixelThresholdInE) { // check threshold
 
       int chan =  (*i).first;  // channel number
@@ -1158,6 +1774,7 @@ void SiPixelDigitizerAlgorithm::make_digis(float thePixelThresholdInE,
 	adc = int( signalInElectrons / theElectronPerADC ); // calibrate gain
       }
       adc = std::min(adc, theAdcFullScale); // Check maximum value
+     
 // Calculate layerIndex
      if (theAdcFullScale!=theAdcFullScaleStack){
         unsigned int Sub_detid=DetId(detID).subdetId();
