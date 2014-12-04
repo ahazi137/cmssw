@@ -652,7 +652,7 @@ void SiPixelDigitizerAlgorithm::digitize(const PixelGeomDetUnit* pixdet,
       if (use_deadmodule_DB_) {  // remove dead modules using DB
         module_killing_DB(detID);
       } else { // remove dead modules using the list in cfg file
-        module_killing_conf(detID);
+        module_killing_conf(detID, tTopo);
       }
     }
 
@@ -1733,18 +1733,30 @@ void SiPixelDigitizerAlgorithm::pixel_inefficiency_db(uint32_t detID) {
 
 //****************************************************************************************************
 
-void SiPixelDigitizerAlgorithm::module_killing_conf(uint32_t detID) {
-  if(!use_module_killing_)
-    return;
-  
+void SiPixelDigitizerAlgorithm::module_killing_conf(uint32_t detid, const TrackerTopology* tTopo){
+
   bool isbad=false;
-  
+
+  ////////split fpix and bpix
+  DetId detId(detid);       // Get the Detid object
+  unsigned int detType=detId.det(); // det type, tracker=1
+  unsigned int subid=detId.subdetId(); //subdetector type, barrel=1, forward=2
+  //////fpix
+  unsigned int disk=tTopo->pxfDisk(detid); //1,2
+  unsigned int blade=tTopo->pxfBlade(detid); //1-24
+  int zindexF=tTopo->pxfModule(detid); //module
+  unsigned int side=tTopo->pxfSide(detid); //side=1 for -z, 2 for +z
+  unsigned int panel=tTopo->pxfPanel(detid); //panel= 1 (4 mod) panel= 2 (3 mod)
+  //////bpix
+  int layerC=tTopo->pxbLayer(detid); //barrel layer = 1,2,3
+  int ladderC=tTopo->pxbLadder(detid); //barrel ladder id 1-20,32,44.
+  int zindex=tTopo->pxbModule(detid); //barrel Z-index=1,8
+
   Parameters::const_iterator itDeadModules=DeadModules.begin();
   
-  int detid = detID;
   for(; itDeadModules != DeadModules.end(); ++itDeadModules){
-    int Dead_detID = itDeadModules->getParameter<int>("Dead_detID");
-    if(detid == Dead_detID){
+    unsigned int Dead_detID = itDeadModules->getParameter<int>("Dead_detID");
+    if(detid==Dead_detID){
       isbad=true;
       break;
     }
@@ -1752,28 +1764,374 @@ void SiPixelDigitizerAlgorithm::module_killing_conf(uint32_t detID) {
   
   if(!isbad)
     return;
-
-  signal_map_type& theSignal = _signal[detID];
-  
+  std::vector<GlobalPixel> badrocpositions (0);
+  signal_map_type& theSignal = _signal[detid];
+      
   std::string Module = itDeadModules->getParameter<std::string>("Module");
+  std::vector<int> Dead_RocID = itDeadModules->getParameter<std::vector<int>>("Dead_RocID"); //++
+  std::vector<int>::iterator itDeadRocs; //++
+  int Dead_RocID2, quartLdr;
+  if (layerC==1){quartLdr=5;}
+  if (layerC==2){quartLdr=8;}
+  if (layerC==3){quartLdr=11;}
   
   if(Module=="whole"){
-    for(signal_map_iterator i = theSignal.begin();i != theSignal.end(); ++i) {
+    for(signal_map_iterator i = theSignal.begin();i != theSignal.end(); i++) {
       i->second.set(0.); // reset amplitude
     }
   }
   
-  for(signal_map_iterator i = theSignal.begin();i != theSignal.end(); ++i) {
-    std::pair<int,int> ip = PixelDigi::channelToPixel(i->first);//get pixel pos
-
-    if(Module=="tbmA" && ip.first>=80 && ip.first<=159){
-      i->second.set(0.);
-    }
-
-    if( Module=="tbmB" && ip.first<=79){
-      i->second.set(0.);
-    }
-  }
+  for(signal_map_iterator i = theSignal.begin();i != theSignal.end(); i++) {
+    std:: pair<int,int> ip = PixelDigi::channelToPixel(i->first);//get pixel pos
+    int drId;
+    if(detType!=1) continue; // look only at tracker
+    if (subid==1){ //Barrel Mask  
+      if(zindex <= 4){ 
+	if (ladderC==quartLdr || ladderC==quartLdr+1 || ladderC==3*quartLdr || ladderC==3*quartLdr+1){// half modules
+	  if (Module=="none" && ip.first <   80){
+	    for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+	      if (*itDeadRocs==-1)  {i->second.set(0.);}
+	      else {
+		for(drId =0; drId < 8; drId++){
+		  if(*itDeadRocs==drId && ip.second <= (416-52*drId) && ip.second > (416-52*(drId+1))){
+		    i->second.set(0.);
+		  }
+		}
+	      }
+	    }
+	  }
+	}//end half modules Z<0 
+	else {// full modules 
+	  if((Module=="tbmA"||Module=="none") && ip.first <   80) {
+	    for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+	      if (*itDeadRocs==-1)  {i->second.set(0.);}
+	      else {
+		for(drId =0; drId < 8; drId++){
+		  if(*itDeadRocs==drId && ip.second <= (416-52*drId) && ip.second > (416-52*(drId+1))){
+		    i->second.set(0.);
+		  }
+		}
+	      }
+	    }
+	  }//end < 80 
+	  else if((Module=="tbmB" || Module=="none") && ip.first >= 80){ 
+	    for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+	      if (*itDeadRocs==-1)  {i->second.set(0.);}
+	      else if (*itDeadRocs>7){Dead_RocID2=*itDeadRocs%8;
+		for(drId =0; drId < 8; drId++){
+		  if(Dead_RocID2==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+		    i->second.set(0.);
+		  }
+		}
+	      }
+	    }
+	  }//end rows>=80 Z<0
+	}//end full module Z<0
+      }// end -Z
+      
+      if(zindex > 4){ 
+	if (ladderC==quartLdr || ladderC==quartLdr+1 || ladderC==3*quartLdr || ladderC==3*quartLdr+1){// half modules
+	  if (Module=="none" && ip.first <   80){
+	    for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {  
+	      if (*itDeadRocs==-1)  {i->second.set(0.);}
+	      else {
+		for(drId =0; drId < 8; drId++){
+		  if(*itDeadRocs==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+		    i->second.set(0.);
+		  }
+		}
+	      }
+	    }  
+	  }
+	}//end half modules Z>0
+	else {// full modules
+	  if((Module=="tbmB" || Module=="none") && ip.first < 80){
+	    for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+	      if (*itDeadRocs==-1)  {i->second.set(0.);}
+	      else if (*itDeadRocs>7){ Dead_RocID2=*itDeadRocs%8;
+		for(drId =0; drId < 8; drId++){
+		  if(Dead_RocID2==drId && ip.second <= (416-52*drId) && ip.second > (416-52*(drId+1))){
+		    i->second.set(0.);
+		  }
+		}
+	      }
+	    }
+	  }//end rows<80 Z>0
+	  else if((Module=="tbmA"||Module=="none") && ip.first >= 80){
+	    for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+	      if (*itDeadRocs==-1)  {i->second.set(0.);}
+	      else {
+		for(drId =0; drId < 8; drId++){
+		  if(*itDeadRocs==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+		    i->second.set(0.);
+		  }
+		}
+	      }
+	    } 
+	  }//end rows>=80  Z>0
+	}//end full modules Z>0
+      }//end +Z 
+    } //barrel mask ends
+    
+    //end mapiterator-barrel////////////////////////////////
+    
+    else if (subid==2){   //Endcap Mask
+      if(side==1 && (disk==1 || disk==2)) {//-zD1 -zD2
+	if(panel==1){//Panel 1 with 4 plaquettes
+	  if (blade==1 || blade==6 || blade==13 || blade==18){//R Panels
+ 	    for (int modRocs=2; modRocs <6; modRocs++){//modRocs=1X(2,3,4,5)
+              if(zindexF != modRocs-1) continue;
+	      if((Module=="none") && ip.first < 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1) i->second.set(0.);
+		  else{
+		    for(drId =0; drId < modRocs; drId++){
+		      if(*itDeadRocs==drId && ip.second <= 52*(modRocs-drId) && ip.second > 52*(modRocs-(drId+1))){
+			i->second.set(0.);
+			//std::cout<<"Detid  "<<detid<<" right blade "<<blade<<std::endl;
+ 		      }
+		    }
+		  }
+		} 
+	      }// <80
+              else if((Module=="none") && ip.first >= 80 && (modRocs==3 || modRocs==4)){//modRocs=2X(3,4)
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else if ((modRocs==3&&(*itDeadRocs)>2)||(modRocs==4&&(*itDeadRocs)>3)){
+		    Dead_RocID2=*itDeadRocs%modRocs;
+		    for(drId =0; drId < modRocs; drId++){
+		      if(Dead_RocID2==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		}
+	      } // >=80
+	    }//loop on mods
+	  }// PR4 ends
+	  else{//L panels
+	    for (int modRocs=2; modRocs <6; modRocs++){//modRocs=1X(2,3,4,5)
+	      if(zindexF != modRocs-1) continue;
+	      if((Module=="none") && ip.first < 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else if ( ((modRocs==3&&(*itDeadRocs)>2)||(modRocs==4&&(*itDeadRocs)>3))||((modRocs==2)||(modRocs==5)) ){
+		    Dead_RocID2=*itDeadRocs%modRocs;
+		    for(drId =0; drId < modRocs; drId++){
+		      if(Dead_RocID2==drId && ip.second <= 52*(modRocs-drId) && ip.second > 52*(modRocs-(drId+1))){
+			i->second.set(0.);
+		      }
+		    }
+		  } 
+		}
+	      }// <80	      
+	      else if((Module=="none") && ip.first >= 80 && (modRocs==3 || modRocs==4)){//modRocs=2X(3,4)
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else {
+		    for(drId =0; drId < modRocs; drId++){
+		      if(*itDeadRocs==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		}
+	      } // >=80
+	    }//loop on mods
+	  }// PL4 ends
+	}// panel 1 ends
+	if(panel==2){//Panel 2 with 3 plaquettes
+	  if (blade==1 || blade==7 || blade==12 || blade==13 || blade==19 || blade==24){//Right panels
+	    for (int modRocs=3; modRocs <6; modRocs++){//modRocs=2X(3,4,5)
+              if(zindexF != modRocs-2) continue;
+	      if((Module=="none") && ip.first < 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else if ((modRocs==3&&(*itDeadRocs)>2)||(modRocs==4&&(*itDeadRocs)>3)||(modRocs==5&&(*itDeadRocs)>4)){
+		    Dead_RocID2=*itDeadRocs%modRocs;
+		    for(drId =0; drId < modRocs; drId++){
+		      if(Dead_RocID2==drId && ip.second <= 52*(modRocs-drId) && ip.second > 52*(modRocs-(drId+1))){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		}
+	      }// <80
+              else if((Module=="none") && ip.first >= 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else{
+		    for(drId =0; drId < modRocs; drId++){
+		      if(*itDeadRocs==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		}
+	      } // >=80
+	    }//loop on mods
+	  }// PR3 ends
+          else{//Left panels 
+ 	    for (int modRocs=3; modRocs <6; modRocs++){//modRocs=2X(3,4,5)
+              if(zindexF != modRocs-2) continue;
+	      if((Module=="none") && ip.first < 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else{
+		    for(drId =0; drId < modRocs; drId++){
+		      if(*itDeadRocs==drId && ip.second <= 52*(modRocs-drId) && ip.second > 52*(modRocs-(drId+1))){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		} // <80
+	      }
+              else if((Module=="none") && ip.first >= 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else if ((modRocs==3&&(*itDeadRocs)>2)||(modRocs==4&&(*itDeadRocs)>3)||(modRocs==5&&(*itDeadRocs)>4)){
+		    Dead_RocID2=*itDeadRocs%modRocs;
+		    for(drId =0; drId < modRocs; drId++){
+		      if(Dead_RocID2==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		}
+	      } // >=80
+	    }//loop on mods
+          }// PL3 ends
+        }// panel 2 ends
+      }//Side (1,1) and (1,2) ends // 
+      else if(side==2 && (disk==1 || disk==2)) {//+zD1 +zD2
+	if(panel==1){//Panel 1 with 4 plaquettes
+	  if (blade==1 || blade==6 || blade==13 || blade==18){//Left panels
+	    for (int modRocs=2; modRocs <6; modRocs++){//modRocs=1X(2,3,4,5)
+	      if(zindexF != modRocs-1) continue;
+	      if((Module=="none") && ip.first < 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else if ( ((modRocs==3&&(*itDeadRocs)>2)||(modRocs==4&&(*itDeadRocs)>3))||((modRocs==2)||(modRocs==5)) ){
+		    Dead_RocID2=*itDeadRocs%modRocs;
+		    for(drId =0; drId < modRocs; drId++){
+		      if(Dead_RocID2==drId && ip.second <= 52*(modRocs-drId) && ip.second > 52*(modRocs-(drId+1))){
+			i->second.set(0.);
+		      }
+		    }
+		  } 
+		}
+	      }// <80	      
+	      else if((Module=="none") && ip.first >= 80 && (modRocs==3 || modRocs==4)){//modRocs=2X(3,4)
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else {
+		    for(drId =0; drId < modRocs; drId++){
+		      if(*itDeadRocs==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		}
+	      } // >=80
+	    }//loop on mods
+	  }// PL4 ends
+          else{//Right panels
+ 	    for (int modRocs=2; modRocs <6; modRocs++){//modRocs=1X(2,3,4,5)
+              if(zindexF != modRocs-1) continue;
+	      if((Module=="none") && ip.first < 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1) i->second.set(0.);
+		  else{
+		    for(drId =0; drId < modRocs; drId++){
+		      if(*itDeadRocs==drId && ip.second <= 52*(modRocs-drId) && ip.second > 52*(modRocs-(drId+1))){
+			i->second.set(0.);
+ 		      }
+		    }
+		  }
+		} 
+	      }// <80
+              else if((Module=="none") && ip.first >= 80 && (modRocs==3 || modRocs==4)){//modRocs=2X(3,4)
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else if ((modRocs==3&&(*itDeadRocs)>2)||(modRocs==4&&(*itDeadRocs)>3)){
+		    Dead_RocID2=*itDeadRocs%modRocs;
+		    for(drId =0; drId < modRocs; drId++){
+		      if(Dead_RocID2==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		}
+	      } // >=80
+	    }//loop on mods
+          }// PR4 ends
+        }// panel 1 ends
+	if(panel==2){//Panel 2 with 3 plaquettes
+	  if (blade==1 || blade==7 || blade==12 || blade==13 || blade==19 || blade==24){//Left panels
+	    for (int modRocs=3; modRocs <6; modRocs++){//modRocs=2X(3,4,5)
+              if(zindexF != modRocs-2) continue;
+	      if((Module=="none") && ip.first < 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else{
+		    for(drId =0; drId < modRocs; drId++){
+		      if(*itDeadRocs==drId && ip.second <= 52*(modRocs-drId) && ip.second > 52*(modRocs-(drId+1))){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		} // <80
+	      }
+              else if((Module=="none") && ip.first >= 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else if ((modRocs==3&&(*itDeadRocs)>2)||(modRocs==4&&(*itDeadRocs)>3)||(modRocs==5&&(*itDeadRocs)>4)){
+		    Dead_RocID2=*itDeadRocs%modRocs;
+		    for(drId =0; drId < modRocs; drId++){
+		      if(Dead_RocID2==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		}
+	      } // >=80
+	    }//loop on mods
+	  }// PL3 ends
+          else{//Right panels
+	    for (int modRocs=3; modRocs <6; modRocs++){//modRocs=2X(3,4,5)
+              if(zindexF != modRocs-2) continue;
+	      if((Module=="none") && ip.first < 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else if ((modRocs==3&&(*itDeadRocs)>2)||(modRocs==4&&(*itDeadRocs)>3)||(modRocs==5&&(*itDeadRocs)>4)){
+		    Dead_RocID2=*itDeadRocs%modRocs;
+		    for(drId =0; drId < modRocs; drId++){
+		      if(Dead_RocID2==drId && ip.second <= 52*(modRocs-drId) && ip.second > 52*(modRocs-(drId+1))){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		}
+	      }// <80
+              else if((Module=="none") && ip.first >= 80){
+		for (itDeadRocs = Dead_RocID.begin();itDeadRocs != Dead_RocID.end(); ++itDeadRocs) {
+		  if (*itDeadRocs==-1)  {i->second.set(0.);}
+		  else{
+		    for(drId =0; drId < modRocs; drId++){
+		      if(*itDeadRocs==drId && ip.second >= 52*drId && ip.second < 52*(drId+1)){
+			i->second.set(0.);
+		      }
+		    }
+		  }
+		}
+	      } // >=80
+	    }//loop on mods
+          }// PL3 ends
+        }// panel 2 ends
+      } 
+    }//endcap mask ends
+  }//end signal_map_iterator
+  
 }
 //****************************************************************************************************
 void SiPixelDigitizerAlgorithm::module_killing_DB(uint32_t detID) {

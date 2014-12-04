@@ -419,7 +419,7 @@ class SiPixelDigitizerAlgorithm  {
                                const GlobalVector& bfield,
                                const DetId& detId) const;
 
-    void module_killing_conf(uint32_t detID); // remove dead modules using the list in the configuration file PixelDigi_cfi.py
+    void module_killing_conf(uint32_t detID, const TrackerTopology* tTopo); // remove dead modules using the list in the configuration file PixelDigi_cfi.py
     void module_killing_DB(uint32_t detID);  // remove dead modules uisng the list in the DB
 
     const PixelEfficiencies pixelEfficiencies_;
